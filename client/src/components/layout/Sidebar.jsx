@@ -24,7 +24,7 @@ const Sidebar = () => {
   ];
 
   const bottomItems = [
-    { path: "/admin/settings", name: "Settings", icon: <FiSettings /> },
+    { path: "/admin/setting", name: "Settings", icon: <FiSettings /> },
     { path: "/logout", name: "Logout", icon: <FiLogOut /> },
   ];
 

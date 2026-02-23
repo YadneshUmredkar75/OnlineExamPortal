@@ -11,7 +11,36 @@ import AddStudent from "../pages/admin/AddStudent";
 import ViewStudents from "../pages/admin/ViewStudents";
 import StudentScores from "../pages/admin/StudentScores";
 import CreateExam from "../pages/admin/CreateExam";
-import StudentResults from "../pages/student/StudentResults";
+
+
+
+/* ================= PROTECTED ROUTE ================= */
+
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const token = localStorage.getItem("token");
+  const userRole = localStorage.getItem("userRole");
+  const userData = JSON.parse(localStorage.getItem("user") || "{}");
+
+  // Debug logs (remove in production)
+  console.log("Protected Route Check:", {
+    token: !!token,
+    userRole,
+    allowedRoles,
+    userData
+  });
+
+  if (!token) {
+    console.log("No token found, redirecting to login");
+    return <Navigate to="/" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(userRole)) {
+    console.log(`Role ${userRole} not allowed. Allowed: ${allowedRoles}`);
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
 
 /* ================= ADMIN LAYOUT ================= */
 
@@ -62,15 +91,46 @@ const AppRouter = () => {
       <Route path="/superadmin/monitoring" element={<SuperAdminDashboard />} />
       <Route path="/superadmin/settings" element={<SuperAdminDashboard />} />
 
-      {/* Admin Routes - Public */}
-      <Route path="/admin/*" element={<AdminDashboard />} />
-      <Route path="/admin/dashboard" element={<AdminDashboard />} />
+      {/* Admin Routes */}
+      <Route
+        path="/admin/*"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
       
-      <Route path="/admin/add-student" element={
-        <AdminLayout>
-          <AddStudent />
-        </AdminLayout>
-      } />
+      <Route
+        path="/admin/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminDashboard />
+
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Student Routes */}
+      <Route
+        path="/student/*"
+        element={
+          <ProtectedRoute allowedRoles={["student"]}>
+            <StudentDashboard />
+          </ProtectedRoute>
+        }
+      />
+      
+      <Route
+        path="/admin/add-student"
+        element={
+          <ProtectedRoute role="admin">
+            <AdminLayout>
+              <AddStudent />
+            </AdminLayout>
+          </ProtectedRoute>
+        }
+      />
 
       <Route path="/admin/view-students" element={
         <AdminLayout>
