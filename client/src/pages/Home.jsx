@@ -1,17 +1,43 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 const Home = () => {
   const navigate = useNavigate();
-  const [role, setRole] = useState("");
-  const [department, setDepartment] = useState("");
+  const [role, setRole] = useState("student"); // Default role set to student
+  const [department, setDepartment] = useState("Computer Science");
   const [formData, setFormData] = useState({
     email: "",
-    password: "",
-    studentId: "",
+    password: "student123",
+    studentId: "STU001",
   });
 
   const departments = ["Computer Science", "Mechanical", "Civil", "IT", "Electronics"];
+
+  // Update form data based on selected role
+  useEffect(() => {
+    if (role === "superadmin") {
+      setFormData({
+        email: "superadmin@college.edu",
+        password: "superadmin123",
+        studentId: "",
+      });
+      setDepartment("");
+    } else if (role === "admin") {
+      setFormData({
+        email: "admin@college.edu",
+        password: "admin123",
+        studentId: "",
+      });
+      setDepartment("Computer Science");
+    } else if (role === "student") {
+      setFormData({
+        email: "",
+        password: "student123",
+        studentId: "STU001",
+      });
+      setDepartment("Computer Science");
+    }
+  }, [role]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -29,7 +55,7 @@ const Home = () => {
       }
       localStorage.setItem("token", "admin_token");
       localStorage.setItem("userRole", "admin");
-      localStorage.setItem("adminDepartment", department); // Store admin's department
+      localStorage.setItem("adminDepartment", department);
       navigate("/admin/dashboard");
     }
 
@@ -40,7 +66,7 @@ const Home = () => {
       }
       localStorage.setItem("token", "student_token");
       localStorage.setItem("userRole", "student");
-      localStorage.setItem("studentDepartment", department); // Store student's department
+      localStorage.setItem("studentDepartment", department);
       navigate("/student/dashboard");
     }
   };
@@ -52,17 +78,17 @@ const Home = () => {
           Role Based Login
         </h1>
 
-        {/* ROLE BUTTONS */}
-        <div className="flex justify-between mb-6">
+        {/* ROLE SELECTION BUTTONS - Student Left, Admin Middle, Super Admin Right */}
+        <div className="flex justify-between mb-8">
           <button 
-            onClick={() => setRole("superadmin")}
+            onClick={() => setRole("student")}
             className={`px-4 py-2 rounded transition-colors ${
-              role === "superadmin" 
-                ? "bg-purple-600 text-white" 
-                : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+              role === "student" 
+                ? "bg-green-600 text-white" 
+                : "bg-green-100 text-green-700 hover:bg-green-200"
             }`}
           >
-            Super Admin
+            Student
           </button>
 
           <button 
@@ -77,89 +103,48 @@ const Home = () => {
           </button>
 
           <button 
-            onClick={() => setRole("student")}
+            onClick={() => setRole("superadmin")}
             className={`px-4 py-2 rounded transition-colors ${
-              role === "student" 
-                ? "bg-green-600 text-white" 
-                : "bg-green-100 text-green-700 hover:bg-green-200"
+              role === "superadmin" 
+                ? "bg-purple-600 text-white" 
+                : "bg-purple-100 text-purple-700 hover:bg-purple-200"
             }`}
           >
-            Student
+            Super Admin
           </button>
         </div>
 
-        {/* LOGIN FORM */}
-        {role && (
-          <form onSubmit={handleLogin} className="space-y-4">
-            {/* Department Selection for Admin & Student */}
-            {(role === "admin" || role === "student") && (
+        {/* LOGIN FORM - Student form will be shown by default */}
+        <form onSubmit={handleLogin} className="space-y-4">
+          {/* Department Selection for Admin & Student */}
+          {(role === "admin" || role === "student") && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Department
+              </label>
+              <select
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Choose Department</option>
+                {departments.map((dept, index) => (
+                  <option key={index} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Student Login Fields - Default view */}
+          {role === "student" && (
+            <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Select Department
+                  Student ID
                 </label>
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Choose Department</option>
-                  {departments.map((dept, index) => (
-                    <option key={index} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Super Admin Login Fields */}
-            {role === "superadmin" && (
-              <>
-                <input
-                  type="email"
-                  placeholder="Super Admin Email"
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  required
-                />
-                <input
-                  type="password"
-                  placeholder="Password"
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  value={formData.password}
-                  onChange={(e) => setFormData({...formData, password: e.target.value})}
-                  required
-                />
-              </>
-            )}
-
-            {/* Admin Login Fields */}
-            {role === "admin" && (
-              <>
-                <input
-                  type="email"
-                  placeholder="Admin Email"
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  required
-                />
-                <input
-                  type="password"
-                  placeholder="Password"
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.password}
-                  onChange={(e) => setFormData({...formData, password: e.target.value})}
-                  required
-                />
-              </>
-            )}
-
-            {/* Student Login Fields */}
-            {role === "student" && (
-              <>
                 <input
                   type="text"
                   placeholder="Student ID"
@@ -168,6 +153,11 @@ const Home = () => {
                   onChange={(e) => setFormData({...formData, studentId: e.target.value})}
                   required
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
                 <input
                   type="password"
                   placeholder="Password"
@@ -176,20 +166,84 @@ const Home = () => {
                   onChange={(e) => setFormData({...formData, password: e.target.value})}
                   required
                 />
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            <button
-              type="submit"
-              className={`w-full text-white p-3 rounded-lg hover:opacity-90 transition-opacity ${
-                role === "superadmin" ? "bg-purple-600" :
-                role === "admin" ? "bg-blue-600" : "bg-green-600"
-              }`}
-            >
-              Login as {role === "superadmin" ? "Super Admin" : role === "admin" ? "Admin" : "Student"}
-            </button>
-          </form>
-        )}
+          {/* Admin Login Fields */}
+          {role === "admin" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  placeholder="Admin Email"
+                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  placeholder="Password"
+                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  required
+                />
+              </div>
+            </>
+          )}
+
+          {/* Super Admin Login Fields */}
+          {role === "superadmin" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  placeholder="Super Admin Email"
+                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  placeholder="Password"
+                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  required
+                />
+              </div>
+            </>
+          )}
+
+          <button
+            type="submit"
+            className={`w-full text-white p-3 rounded-lg hover:opacity-90 transition-opacity ${
+              role === "student" ? "bg-green-600" :
+              role === "admin" ? "bg-blue-600" : "bg-purple-600"
+            }`}
+          >
+            Login as {role === "student" ? "Student" : role === "admin" ? "Admin" : "Super Admin"}
+          </button>
+        </form>
       </div>
     </div>
   );
