@@ -1,6 +1,7 @@
 // index.js (main server file)
 import express from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors'
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import superAdminRoutes from './routes/superadminRoutes.js'
@@ -8,8 +9,16 @@ import adminRoutes from './routes/adminRoutes.js';
 import studentRoutes from './routes/studentRoutes.js'
 
 dotenv.config();
-
 const app = express();
+// ✅ Allow frontend connection
+app.use(
+  cors({
+    origin: "http://localhost:5173", // your frontend
+    credentials: true,
+  })
+);
+
+
 app.use(express.json());
 
 connectDB();
