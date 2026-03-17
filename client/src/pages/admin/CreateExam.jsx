@@ -1,474 +1,471 @@
-import React, { useState, useRef, useEffect } from "react";
+// pages/admin/CreateExam.jsx
+import React, { useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { createExam, clearActionError } from "../../store/slices/examSlices";
+import { FiCheckCircle, FiAlertCircle, FiX, FiStar } from "react-icons/fi";
 
+// ─── Toast ────────────────────────────────────────────────────────────────────
+const Toast = ({ message, type, onClose }) => (
+  <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5
+    rounded-xl shadow-2xl text-sm font-semibold max-w-sm
+    ${type === "success" ? "bg-emerald-600 text-white" : "bg-red-500 text-white"}`}>
+    {type === "success"
+      ? <FiCheckCircle className="w-4 h-4 shrink-0" />
+      : <FiAlertCircle className="w-4 h-4 shrink-0" />}
+    <span className="flex-1">{message}</span>
+    <button onClick={onClose}><FiX className="w-4 h-4 opacity-70 hover:opacity-100" /></button>
+  </div>
+);
+
+const EMPTY_EXAM = { subject: "", duration: "", startTime: "", endTime: "", marksPerQuestion: "" };
+const MARKS_OPTIONS = [1, 2, 3, 4, 5];
+
+const makeQuestion = () => ({
+  id:            Date.now() + Math.random(),
+  text:          "",
+  options:       ["", "", "", ""],
+  correctAnswer: null,
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 const CreateExam = () => {
-  const [step, setStep] = useState(1);
-  const [examData, setExamData] = useState({
-    subject: "",
-    duration: "",
-    startTime: "",
-    endTime: "",
-  });
+  const navigate  = useNavigate();
+  const dispatch  = useDispatch();
+  const { actionLoading, actionError } = useSelector(s => s.exams);
 
+  React.useEffect(() => {
+    const role  = localStorage.getItem("userRole");
+    const dept  = localStorage.getItem("adminDepartment");
+    const token = localStorage.getItem("token");
+    if (!token || role !== "admin" || !dept) navigate("/");
+    dispatch(clearActionError());
+  }, []); // eslint-disable-line
+
+  const adminDept = localStorage.getItem("adminDepartment") || "";
+
+  const [step,      setStep]      = useState(1);
+  const [examData,  setExamData]  = useState(EMPTY_EXAM);
   const [questions, setQuestions] = useState([]);
-  const [errors, setErrors] = useState({});
-  const [successMessage, setSuccessMessage] = useState("");
+  const [errors,    setErrors]    = useState({});
+  const [toast,     setToast]     = useState(null);
 
   const questionRefs = useRef([]);
 
-  // ── Handle exam basic info change ────────────────────────────────
-  const handleExamInfoChange = (e) => {
+  const showToast = useCallback((message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4500);
+  }, []);
+
+  React.useEffect(() => {
+    if (actionError) showToast(actionError, "error");
+  }, [actionError, showToast]);
+
+  // ── Step 1 handlers ────────────────────────────────────────────────────────
+  const handleInfoChange = (e) => {
     const { name, value } = e.target;
-    setExamData((prev) => ({ ...prev, [name]: value }));
-
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
-    }
+    setExamData(p => ({ ...p, [name]: value }));
+    if (errors[name]) setErrors(p => ({ ...p, [name]: "" }));
   };
 
-  // ── Add ONE new empty question ───────────────────────────────────
+  const selectMarks = (val) => {
+    setExamData(p => ({ ...p, marksPerQuestion: val }));
+    if (errors.marksPerQuestion) setErrors(p => ({ ...p, marksPerQuestion: "" }));
+  };
+
+  const validateStep1 = () => {
+    const e = {};
+    if (!examData.subject.trim())                              e.subject           = "Subject name is required";
+    if (!examData.duration || Number(examData.duration) <= 0) e.duration           = "Enter a valid duration in minutes";
+    if (!examData.startTime)                                   e.startTime          = "Start time is required";
+    if (!examData.endTime)                                     e.endTime            = "End time is required";
+    if (examData.startTime && examData.endTime &&
+        new Date(examData.endTime) <= new Date(examData.startTime))
+                                                               e.endTime            = "End time must be after start time";
+    if (!examData.marksPerQuestion)                            e.marksPerQuestion   = "Please select marks per question";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  // ── Step 2 handlers ────────────────────────────────────────────────────────
   const addQuestion = () => {
-    const newQ = {
-      id: Date.now() + Math.random(),
-      text: "",
-      options: ["", "", "", ""],
-      correctAnswer: null,
-    };
-
-    setQuestions((prev) => [...prev, newQ]);
-
-    setTimeout(() => {
-      const newIndex = questions.length;
-      if (questionRefs.current[newIndex]) {
-        questionRefs.current[newIndex].focus();
-      }
-    }, 100);
+    const q = makeQuestion();
+    setQuestions(p => [...p, q]);
+    setTimeout(() => questionRefs.current[questions.length]?.focus(), 80);
   };
 
-  // ── Add TEN new empty questions at once ──────────────────────────
   const addTenQuestions = () => {
-    const newQuestions = [];
-    const now = Date.now();
-
-    for (let i = 0; i < 10; i++) {
-      newQuestions.push({
-        id: now + Math.random() + i,
-        text: "",
-        options: ["", "", "", ""],
-        correctAnswer: null,
-      });
-    }
-
-    setQuestions((prev) => [...prev, ...newQuestions]);
-
-    // Optional: focus the first of the new batch
-    setTimeout(() => {
-      const firstNewIndex = questions.length;
-      if (questionRefs.current[firstNewIndex]) {
-        questionRefs.current[firstNewIndex].focus();
-      }
-    }, 100);
+    setQuestions(p => [...p, ...Array.from({ length: 10 }, makeQuestion)]);
+    setTimeout(() => questionRefs.current[questions.length]?.focus(), 80);
   };
 
-  // ── Remove question ──────────────────────────────────────────────
-  const removeQuestion = (id) => {
-    setQuestions((prev) => prev.filter((q) => q.id !== id));
+  const removeQuestion = (id) => setQuestions(p => p.filter(q => q.id !== id));
+
+  const updateQuestion = (id, field, value, optIdx = null) => {
+    setQuestions(p => p.map(q => {
+      if (q.id !== id) return q;
+      if (field === "text")          return { ...q, text: value };
+      if (field === "option") { const opts = [...q.options]; opts[optIdx] = value; return { ...q, options: opts }; }
+      if (field === "correctAnswer") return { ...q, correctAnswer: parseInt(value, 10) };
+      return q;
+    }));
+    const key = field === "option" ? `q-${id}-opt${optIdx}` : `q-${id}-${field}`;
+    if (errors[key]) setErrors(p => { const u = { ...p }; delete u[key]; return u; });
   };
 
-  // ── Update question field ────────────────────────────────────────
-  const updateQuestion = (id, field, value, optionIndex = null) => {
-    setQuestions((prev) =>
-      prev.map((q) => {
-        if (q.id !== id) return q;
-
-        if (field === "text") return { ...q, text: value };
-        if (field === "option") {
-          const newOptions = [...q.options];
-          newOptions[optionIndex] = value;
-          return { ...q, options: newOptions };
-        }
-        if (field === "correctAnswer") {
-          return { ...q, correctAnswer: parseInt(value, 10) };
-        }
-
-        return q;
-      })
-    );
-
-    if (errors[`q-${id}-${field}`]) {
-      setErrors((prev) => {
-        const updated = { ...prev };
-        delete updated[`q-${id}-${field}`];
-        return updated;
-      });
-    }
-  };
-
-  // ── Validate exam basic info ─────────────────────────────────────
-  const validateExamInfo = () => {
-    const newErrors = {};
-
-    if (!examData.subject.trim()) newErrors.subject = "Subject name is required";
-    if (!examData.duration || Number(examData.duration) <= 0)
-      newErrors.duration = "Enter a valid duration in minutes";
-    if (!examData.startTime) newErrors.startTime = "Start time is required";
-    if (!examData.endTime) newErrors.endTime = "End time is required";
-
-    if (examData.startTime && examData.endTime) {
-      const start = new Date(examData.startTime);
-      const end = new Date(examData.endTime);
-      if (end <= start) newErrors.endTime = "End time must be after start time";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleNextStep = () => {
-    if (validateExamInfo()) {
-      setStep(2);
-    }
-  };
-
-  // ── Validate all questions ───────────────────────────────────────
   const validateQuestions = () => {
-    const newErrors = {};
-
-    questions.forEach((q) => {
-      if (!q.text.trim()) {
-        newErrors[`q-${q.id}-text`] = "Question text is required";
-      }
-
-      q.options.forEach((opt, idx) => {
-        if (!opt.trim()) {
-          newErrors[`q-${q.id}-opt${idx}`] = `Option ${idx + 1} cannot be empty`;
-        }
+    const e = {};
+    questions.forEach(q => {
+      if (!q.text.trim())           e[`q-${q.id}-text`]    = "Question text is required";
+      q.options.forEach((opt, i) => {
+        if (!opt.trim())            e[`q-${q.id}-opt${i}`] = `Option ${i+1} cannot be empty`;
       });
-
-      if (q.correctAnswer === null) {
-        newErrors[`q-${q.id}-correct`] = "Please select the correct answer";
-      }
+      if (q.correctAnswer === null) e[`q-${q.id}-correct`] = "Select the correct answer";
     });
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  // ── Final submit ─────────────────────────────────────────────────
-  const handleSubmit = () => {
-    if (questions.length === 0) {
-      alert("Please add at least one question.");
-      return;
-    }
+  // ── Submit ─────────────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (questions.length === 0) { showToast("Please add at least one question.", "error"); return; }
+    if (!validateQuestions())   { showToast("Fix the errors shown in the questions.", "error"); return; }
 
-    if (!validateQuestions()) {
-      alert("Please correct the errors shown in the questions.");
-      return;
-    }
-
-    const exam = {
-      ...examData,
-      questions: questions.map((q) => ({
-        text: q.text,
-        options: q.options,
+    const payload = {
+      subject:          examData.subject.trim(),
+      duration:         Number(examData.duration),
+      startTime:        examData.startTime,
+      endTime:          examData.endTime,
+      marksPerQuestion: Number(examData.marksPerQuestion),
+      questions:        questions.map(q => ({
+        text:          q.text.trim(),
+        options:       q.options.map(o => o.trim()),
         correctAnswer: q.correctAnswer,
       })),
     };
 
-    console.log("Exam Created:", exam);
-
-    setSuccessMessage(`Exam "${examData.subject}" created successfully!`);
-    setTimeout(() => setSuccessMessage(""), 5000);
-
-    // Reset
-    setExamData({ subject: "", duration: "", startTime: "", endTime: "" });
-    setQuestions([]);
-    setStep(1);
-    setErrors({});
+    const res = await dispatch(createExam(payload));
+    if (res.meta.requestStatus === "fulfilled") {
+      showToast(`Exam "${examData.subject}" created! Total marks: ${questions.length * Number(examData.marksPerQuestion)}`, "success");
+      setExamData(EMPTY_EXAM);
+      setQuestions([]);
+      setStep(1);
+      setErrors({});
+    }
   };
 
+  const totalMarks = questions.length * (Number(examData.marksPerQuestion) || 0);
+
+  // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+
         {/* Header */}
-        <div className="bg-indigo-600 text-white px-8 py-10">
-          <h1 className="text-3xl md:text-4xl font-bold">Create New Exam</h1>
-          <p className="mt-3 text-indigo-100">
-            Fill exam details and add as many questions as you want
-          </p>
-        </div>
-
-        {/* Success Message */}
-        {successMessage && (
-          <div className="bg-green-100 border-l-4 border-green-500 text-green-800 p-5 mx-8 mt-6 rounded-lg">
-            {successMessage}
-          </div>
-        )}
-
-        {/* Step Progress */}
-        <div className="flex border-b px-8 pt-6 bg-gray-50">
-          <div
-            className={`pb-5 px-8 font-semibold cursor-pointer transition-colors ${
-              step === 1
-                ? "border-b-4 border-indigo-600 text-indigo-700"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            1. Exam Information
-          </div>
-          <div
-            className={`pb-5 px-8 font-semibold cursor-pointer transition-colors ${
-              step === 2
-                ? "border-b-4 border-indigo-600 text-indigo-700"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            2. Questions ({questions.length})
+        <div className="bg-indigo-600 text-white px-8 py-7">
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">Create New Exam</h1>
+              <p className="mt-1 text-indigo-200 text-sm">Fill exam details and add questions for your students</p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              {adminDept && (
+                <span className="bg-indigo-500 border border-indigo-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+                  {adminDept} Department
+                </span>
+              )}
+              {examData.marksPerQuestion && questions.length > 0 && (
+                <span className="bg-indigo-700 border border-indigo-500 text-indigo-100 text-xs font-bold px-3 py-1.5 rounded-lg">
+                  Total: {totalMarks} marks
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* STEP 1: Exam Details */}
+        {/* Step tabs */}
+        <div className="flex border-b px-8 bg-gray-50">
+          {[
+            { n: 1, label: "Exam Information" },
+            { n: 2, label: `Questions (${questions.length})` },
+          ].map(({ n, label }) => (
+            <button key={n} type="button"
+              onClick={() => n === 1 ? setStep(1) : (validateStep1() && setStep(2))}
+              className={`py-4 px-8 font-semibold text-sm transition-colors border-b-4
+                ${step === n ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+              {n}. {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ══ STEP 1 ═══════════════════════════════════════════════════════════ */}
         {step === 1 && (
-          <div className="p-8 space-y-8">
+          <div className="p-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+              {/* Subject */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Subject / Paper Name <span className="text-red-600">*</span>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Subject / Paper Name <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  name="subject"
-                  value={examData.subject}
-                  onChange={handleExamInfoChange}
-                  placeholder="e.g. Data Structures and Algorithms"
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    errors.subject ? "border-red-500" : "border-gray-300"
-                  }`}
-                />
-                {errors.subject && <p className="text-red-600 text-sm mt-1">{errors.subject}</p>}
+                <input type="text" name="subject" value={examData.subject}
+                  onChange={handleInfoChange} placeholder="e.g. Data Structures and Algorithms"
+                  className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
+                    ${errors.subject ? "border-red-400 bg-red-50" : "border-gray-300"}`} />
+                {errors.subject && <p className="text-red-600 text-xs mt-1">{errors.subject}</p>}
               </div>
 
+              {/* Duration */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration (minutes) <span className="text-red-600">*</span>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Duration (minutes) <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  name="duration"
-                  value={examData.duration}
-                  onChange={handleExamInfoChange}
-                  placeholder="120"
-                  min="1"
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    errors.duration ? "border-red-500" : "border-gray-300"
-                  }`}
-                />
-                {errors.duration && <p className="text-red-600 text-sm mt-1">{errors.duration}</p>}
+                <input type="number" name="duration" value={examData.duration} min="1"
+                  onChange={handleInfoChange} placeholder="e.g. 60"
+                  className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
+                    ${errors.duration ? "border-red-400 bg-red-50" : "border-gray-300"}`} />
+                {errors.duration && <p className="text-red-600 text-xs mt-1">{errors.duration}</p>}
+              </div>
+
+              {/* Start Time */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Start Time <span className="text-red-500">*</span>
+                </label>
+                <input type="datetime-local" name="startTime" value={examData.startTime}
+                  onChange={handleInfoChange}
+                  className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
+                    ${errors.startTime ? "border-red-400 bg-red-50" : "border-gray-300"}`} />
+                {errors.startTime && <p className="text-red-600 text-xs mt-1">{errors.startTime}</p>}
+              </div>
+
+              {/* End Time */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  End Time <span className="text-red-500">*</span>
+                </label>
+                <input type="datetime-local" name="endTime" value={examData.endTime}
+                  onChange={handleInfoChange}
+                  className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
+                    ${errors.endTime ? "border-red-400 bg-red-50" : "border-gray-300"}`} />
+                {errors.endTime && <p className="text-red-600 text-xs mt-1">{errors.endTime}</p>}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Start Time <span className="text-red-600">*</span>
+            {/* ── Marks Per Question ──────────────────────────────────────────── */}
+            <div className={`p-5 rounded-xl border-2 ${errors.marksPerQuestion ? "border-red-300 bg-red-50" : "border-indigo-100 bg-indigo-50"}`}>
+              <div className="flex items-center gap-2 mb-3">
+                <FiStar className="w-4 h-4 text-indigo-600" />
+                <label className="text-sm font-bold text-indigo-800">
+                  Marks Per Question <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="datetime-local"
-                  name="startTime"
-                  value={examData.startTime}
-                  onChange={handleExamInfoChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    errors.startTime ? "border-red-500" : "border-gray-300"
-                  }`}
-                />
-                {errors.startTime && <p className="text-red-600 text-sm mt-1">{errors.startTime}</p>}
+                <span className="text-xs text-indigo-500 ml-1">(cannot be changed after creation)</span>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  End Time <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  name="endTime"
-                  value={examData.endTime}
-                  onChange={handleExamInfoChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    errors.endTime ? "border-red-500" : "border-gray-300"
-                  }`}
-                />
-                {errors.endTime && <p className="text-red-600 text-sm mt-1">{errors.endTime}</p>}
+              <div className="flex gap-3 flex-wrap">
+                {MARKS_OPTIONS.map(val => (
+                  <button key={val} type="button" onClick={() => selectMarks(val)}
+                    className={`w-14 h-14 rounded-xl font-black text-lg border-2 transition-all
+                      ${examData.marksPerQuestion === val
+                        ? "bg-indigo-600 border-indigo-600 text-white shadow-lg scale-105"
+                        : "bg-white border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600"}`}>
+                    {val}
+                  </button>
+                ))}
+                {/* Custom value input */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">or custom:</span>
+                  <input
+                    type="number" min="1" max="10"
+                    placeholder="e.g. 3"
+                    value={MARKS_OPTIONS.includes(examData.marksPerQuestion) ? "" : (examData.marksPerQuestion || "")}
+                    onChange={e => {
+                      const v = parseInt(e.target.value, 10);
+                      if (v >= 1 && v <= 10) selectMarks(v);
+                      else if (e.target.value === "") setExamData(p => ({ ...p, marksPerQuestion: "" }));
+                    }}
+                    className={`w-20 px-3 py-2 border-2 rounded-xl text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-indigo-500
+                      ${!MARKS_OPTIONS.includes(examData.marksPerQuestion) && examData.marksPerQuestion
+                        ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                        : "border-gray-200"}`}
+                  />
+                </div>
               </div>
+              {errors.marksPerQuestion && (
+                <p className="text-red-600 text-xs mt-2">{errors.marksPerQuestion}</p>
+              )}
+              {examData.marksPerQuestion && (
+                <p className="text-indigo-600 text-xs mt-2 font-medium">
+                  ✓ Each question = <strong>{examData.marksPerQuestion} mark{examData.marksPerQuestion > 1 ? "s" : ""}</strong>
+                </p>
+              )}
             </div>
 
-            <div className="flex justify-end mt-10">
-              <button
-                onClick={handleNextStep}
-                className="px-8 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
-              >
+            {/* Dept info */}
+            <div className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+              <span className="text-lg">🏫</span>
+              <p className="text-sm text-gray-600">
+                This exam will be visible only to <strong>{adminDept}</strong> department students.
+              </p>
+            </div>
+
+            <div className="flex justify-end">
+              <button onClick={() => { if (validateStep1()) setStep(2); }}
+                className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-md text-sm">
                 Next: Add Questions →
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 2: Questions */}
+        {/* ══ STEP 2 ═══════════════════════════════════════════════════════════ */}
         {step === 2 && (
           <div className="p-8">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Questions <span className="text-gray-500 font-normal">({questions.length})</span>
-                </h2>
-                <p className="text-gray-600 mt-1">
-                  Add questions one by one or in batches of 10.
-                </p>
+
+            {/* Marks summary banner */}
+            <div className="mb-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <FiStar className="w-5 h-5 text-indigo-600" />
+                <div>
+                  <p className="text-sm font-bold text-indigo-800">
+                    {examData.marksPerQuestion} mark{Number(examData.marksPerQuestion) > 1 ? "s" : ""} per question
+                    <span className="text-xs font-normal text-indigo-500 ml-2">(locked)</span>
+                  </p>
+                  <p className="text-xs text-indigo-500 mt-0.5">
+                    {questions.length} questions added so far
+                  </p>
+                </div>
               </div>
+              {questions.length > 0 && (
+                <div className="text-right">
+                  <p className="text-2xl font-black text-indigo-700">{totalMarks}</p>
+                  <p className="text-xs text-indigo-500">total marks</p>
+                </div>
+              )}
+            </div>
 
-              <div className="flex gap-4">
-                <button
-                  onClick={addQuestion}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md"
-                >
-                  <span>+1</span> Add Question
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  Questions <span className="text-gray-400 font-normal">({questions.length})</span>
+                </h2>
+                <p className="text-gray-500 text-sm mt-0.5">Add MCQ questions with 4 options each</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={addQuestion}
+                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold shadow-sm">
+                  + Add 1
                 </button>
-
-                <button
-                  onClick={addTenQuestions}
-                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 shadow-md"
-                >
-                  <span>+10</span> Add 10 Questions
+                <button onClick={addTenQuestions}
+                  className="px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-semibold shadow-sm">
+                  + Add 10
                 </button>
               </div>
             </div>
 
+            {/* Empty state */}
             {questions.length === 0 && (
-              <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
-                <p className="text-xl text-gray-600 mb-4">No questions added yet</p>
-                <div className="flex justify-center gap-4">
-                  <button
-                    onClick={addQuestion}
-                    className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
+              <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                <p className="text-gray-500 mb-4">No questions added yet</p>
+                <div className="flex justify-center gap-3">
+                  <button onClick={addQuestion}
+                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold">
                     + Add First Question
                   </button>
-                  <button
-                    onClick={addTenQuestions}
-                    className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
+                  <button onClick={addTenQuestions}
+                    className="px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-semibold">
                     + Add 10 Questions
                   </button>
                 </div>
               </div>
             )}
 
+            {/* Question cards */}
             {questions.map((q, index) => (
-              <div
-                key={q.id}
-                className="mb-10 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
-              >
-                <div className="flex justify-between items-center mb-5">
-                  <h3 className="text-xl font-semibold text-gray-800">
-                    Question {index + 1}
-                  </h3>
-                  {questions.length > 1 && (
-                    <button
-                      onClick={() => removeQuestion(q.id)}
-                      className="text-red-600 hover:text-red-800 font-medium px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      Remove
-                    </button>
-                  )}
+              <div key={q.id} className="mb-6 p-6 bg-white border border-gray-200 rounded-xl shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-sm font-black">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <span className="text-sm font-bold text-gray-800">Question {index + 1}</span>
+                      <span className="ml-2 text-xs text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded-full">
+                        {examData.marksPerQuestion} mark{Number(examData.marksPerQuestion) > 1 ? "s" : ""}
+                      </span>
+                      <span className="ml-1 text-xs text-gray-400">
+                        {q.correctAnswer !== null ? "✅" : "⚠️ No answer"}
+                      </span>
+                    </div>
+                  </div>
+                  <button onClick={() => removeQuestion(q.id)}
+                    className="text-red-500 hover:text-red-700 text-xs font-semibold px-3 py-1.5 hover:bg-red-50 rounded-lg transition-colors">
+                    Remove
+                  </button>
                 </div>
 
-                {/* Question Text */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Question Text <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    ref={(el) => (questionRefs.current[index] = el)}
+                {/* Question text */}
+                <div className="mb-4">
+                  <input type="text"
+                    ref={el => (questionRefs.current[index] = el)}
                     value={q.text}
-                    onChange={(e) => updateQuestion(q.id, "text", e.target.value)}
-                    placeholder="Type your question here..."
-                    className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                      errors[`q-${q.id}-text`] ? "border-red-500" : "border-gray-300"
-                    }`}
-                  />
+                    onChange={e => updateQuestion(q.id, "text", e.target.value)}
+                    placeholder={`Question ${index + 1} — type here...`}
+                    className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500
+                      ${errors[`q-${q.id}-text`] ? "border-red-400 bg-red-50" : "border-gray-300"}`} />
                   {errors[`q-${q.id}-text`] && (
-                    <p className="text-red-600 text-sm mt-1">{errors[`q-${q.id}-text`]}</p>
+                    <p className="text-red-600 text-xs mt-1">{errors[`q-${q.id}-text`]}</p>
                   )}
                 </div>
 
                 {/* Options */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-                  {q.options.map((opt, optIndex) => (
-                    <div key={optIndex} className="flex items-center gap-4">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Option {optIndex + 1}
-                        </label>
-                        <input
-                          type="text"
-                          value={opt}
-                          onChange={(e) =>
-                            updateQuestion(q.id, "option", e.target.value, optIndex)
-                          }
-                          placeholder={`Enter option ${optIndex + 1}`}
-                          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                            errors[`q-${q.id}-opt${optIndex}`]
-                              ? "border-red-500"
-                              : "border-gray-300"
-                          }`}
-                        />
-                        {errors[`q-${q.id}-opt${optIndex}`] && (
-                          <p className="text-red-600 text-sm mt-1">
-                            {errors[`q-${q.id}-opt${optIndex}`]}
-                          </p>
-                        )}
-                      </div>
-
-                      <label className="flex items-center gap-2 cursor-pointer pt-6">
-                        <input
-                          type="radio"
-                          name={`correct-answer-${q.id}`}
-                          value={optIndex}
-                          checked={q.correctAnswer === optIndex}
-                          onChange={(e) =>
-                            updateQuestion(q.id, "correctAnswer", e.target.value)
-                          }
-                          className="w-5 h-5 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="text-sm font-medium text-gray-700">Correct</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {q.options.map((opt, optIdx) => (
+                    <div key={optIdx}
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-colors
+                        ${q.correctAnswer === optIdx ? "border-green-400 bg-green-50" : "border-gray-200 bg-gray-50"}`}>
+                      <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                        <input type="radio" name={`correct-${q.id}`} value={optIdx}
+                          checked={q.correctAnswer === optIdx}
+                          onChange={e => updateQuestion(q.id, "correctAnswer", e.target.value)}
+                          className="w-4 h-4 accent-green-600" />
+                        <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center
+                          ${q.correctAnswer === optIdx ? "bg-green-500 text-white" : "bg-gray-300 text-gray-600"}`}>
+                          {String.fromCharCode(65 + optIdx)}
+                        </span>
                       </label>
+                      <input type="text" value={opt}
+                        onChange={e => updateQuestion(q.id, "option", e.target.value, optIdx)}
+                        placeholder={`Option ${String.fromCharCode(65 + optIdx)}`}
+                        className={`flex-1 bg-transparent text-sm focus:outline-none
+                          ${errors[`q-${q.id}-opt${optIdx}`] ? "placeholder-red-400" : "placeholder-gray-400"}`} />
                     </div>
                   ))}
                 </div>
-
                 {errors[`q-${q.id}-correct`] && (
-                  <p className="text-red-600 text-sm mt-2 bg-red-50 p-3 rounded-lg">
-                    {errors[`q-${q.id}-correct`]}
-                  </p>
+                  <p className="text-red-600 text-xs mt-2 bg-red-50 p-2 rounded-lg">⚠️ {errors[`q-${q.id}-correct`]}</p>
                 )}
               </div>
             ))}
 
-            {/* Bottom Actions */}
-            <div className="flex flex-col sm:flex-row gap-4 mt-12">
-              <button
-                onClick={() => setStep(1)}
-                className="flex-1 py-4 px-8 border-2 border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-              >
-                ← Back to Exam Details
-              </button>
-
-              <button
-                onClick={handleSubmit}
-                className="flex-1 py-4 px-8 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors shadow-lg"
-              >
-                Create Exam
-              </button>
-            </div>
+            {/* Bottom actions */}
+            {questions.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-4 mt-6">
+                <button onClick={() => setStep(1)}
+                  className="flex-1 py-3 px-8 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 text-sm">
+                  ← Back to Exam Details
+                </button>
+                <button onClick={handleSubmit} disabled={actionLoading}
+                  className="flex-1 py-3 px-8 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 shadow-lg text-sm
+                    disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {actionLoading
+                    ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Creating…</>
+                    : `✓ Create Exam · ${questions.length} questions · ${totalMarks} marks`
+                  }
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

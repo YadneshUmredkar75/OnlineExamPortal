@@ -1,971 +1,582 @@
-import React, { useState } from "react";
+// pages/superadmin/components/AdminManagement.jsx
+// Updated: replaced local axios + useState with Redux adminSlice
+
+import React, { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import {
-  Search,
-  Filter,
-  Download,
-  Eye,
-  Edit,
-  Trash2,
-  Plus,
-  UserPlus,
-  Mail,
-  Phone,
-  Calendar,
-  Shield,
-  MoreVertical,
-  CheckCircle,
-  XCircle,
-  RefreshCw,
-  X,
-  Save,
-  AlertCircle
+  fetchAdmins, createAdmin, updateAdmin,
+  deleteAdmin as deleteAdminThunk,
+  toggleAdminStatus, clearActionError,
+} from "../../../store/slices/adminSlices";
+import {
+  Search, Download, Eye, Edit, Trash2, Plus, UserPlus,
+  CheckCircle, XCircle, RefreshCw, X, AlertCircle, Loader2,
 } from "lucide-react";
 
-const AdminManagement = () => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [selectedAdmin, setSelectedAdmin] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(5);
-  const [formErrors, setFormErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+const DEPARTMENTS = ["IT", "CS", "CE", "ECE"];
 
-  // Form state for new admin
-  const [newAdmin, setNewAdmin] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    department: "",
-    password: "",
+// ─── Toast ─────────────────────────────────────────────────────────────────────
+const Toast = ({ msg, type, onClose }) => {
+  useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
+  return (
+    <div className={`fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-5 py-3
+      rounded-xl shadow-2xl text-sm font-semibold border
+      ${type === "success"
+        ? "bg-green-50 border-green-200 text-green-800"
+        : "bg-red-50 border-red-200 text-red-800"}`}>
+      {type === "success"
+        ? <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+        : <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />}
+      {msg}
+      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+};
+
+// ─── Field wrapper ─────────────────────────────────────────────────────────────
+const Field = ({ label, required, error, children }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {label} {required && <span className="text-red-500">*</span>}
+    </label>
+    {children}
+    {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+  </div>
+);
+
+// ─── ADD / EDIT MODAL ──────────────────────────────────────────────────────────
+const AdminFormModal = ({ editAdmin, onClose, onSaved }) => {
+  const dispatch = useDispatch();
+  // Only read loading + actionError from Redux — admins list is managed by parent
+  const { loading, actionError } = useSelector(s => s.admins);
+  const isEdit = !!editAdmin;
+
+  const [form, setForm] = useState({
+    email:           editAdmin?.email      || "",
+    department:      editAdmin?.department || "",
+    password:        "",
     confirmPassword: "",
-    permissions: {
-      createExam: false,
-      manageStudents: false,
-      viewResults: false,
-      manageQuestions: false,
-      fullAccess: false
-    }
   });
+  const [errors, setErrors] = useState({});
 
-  // Initial admins list
-  const [adminsList, setAdminsList] = useState([
-    { 
-      id: 1, 
-      name: "John Doe", 
-      email: "john.doe@example.com", 
-      department: "Science", 
-      students: 245, 
-      exams: 12, 
-      status: "active", 
-      lastActive: "2 min ago", 
-      phone: "+1 234-567-8901",
-      joinDate: "2023-01-15",
-      permissions: ["create_exam", "manage_students", "view_results"]
-    },
-    { 
-      id: 2, 
-      name: "Jane Smith", 
-      email: "jane.smith@example.com", 
-      department: "Commerce", 
-      students: 189, 
-      exams: 8, 
-      status: "active", 
-      lastActive: "15 min ago", 
-      phone: "+1 234-567-8902",
-      joinDate: "2023-03-20",
-      permissions: ["create_exam", "manage_students"]
-    },
-    { 
-      id: 3, 
-      name: "Mike Johnson", 
-      email: "mike.j@example.com", 
-      department: "Arts", 
-      students: 156, 
-      exams: 6, 
-      status: "inactive", 
-      lastActive: "2 days ago", 
-      phone: "+1 234-567-8903",
-      joinDate: "2023-02-10",
-      permissions: ["view_results"]
-    },
-    { 
-      id: 4, 
-      name: "Sarah Wilson", 
-      email: "sarah.w@example.com", 
-      department: "Science", 
-      students: 198, 
-      exams: 10, 
-      status: "active", 
-      lastActive: "1 hour ago", 
-      phone: "+1 234-567-8904",
-      joinDate: "2023-04-05",
-      permissions: ["create_exam", "manage_students", "view_results", "manage_questions"]
-    },
-    { 
-      id: 5, 
-      name: "Tom Brown", 
-      email: "tom.b@example.com", 
-      department: "Commerce", 
-      students: 167, 
-      exams: 7, 
-      status: "active", 
-      lastActive: "3 hours ago", 
-      phone: "+1 234-567-8905",
-      joinDate: "2023-05-12",
-      permissions: ["create_exam", "manage_students"]
-    },
-    { 
-      id: 6, 
-      name: "Emily Davis", 
-      email: "emily.d@example.com", 
-      department: "Arts", 
-      students: 295, 
-      exams: 15, 
-      status: "active", 
-      lastActive: "30 min ago", 
-      phone: "+1 234-567-8906",
-      joinDate: "2023-01-30",
-      permissions: ["create_exam", "manage_students", "view_results", "manage_questions", "manage_admins"]
-    },
-  ]);
+  // Push redux API error into local field errors
+  useEffect(() => {
+    if (actionError) setErrors(p => ({ ...p, _api: actionError }));
+  }, [actionError]);
 
-  // Filter admins based on search and filters
-  const filteredAdmins = adminsList.filter(admin => {
-    const matchesSearch = admin.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         admin.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = departmentFilter === "all" || admin.department === departmentFilter;
-    const matchesStatus = statusFilter === "all" || admin.status === statusFilter;
-    return matchesSearch && matchesDepartment && matchesStatus;
-  });
+  // Clear actionError on unmount
+  useEffect(() => () => dispatch(clearActionError()), [dispatch]);
 
-  // Pagination logic
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredAdmins.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredAdmins.length / itemsPerPage);
+  const validate = () => {
+    const e = {};
+    if (!form.email.trim())                                     e.email           = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(form.email))                 e.email           = "Invalid email";
+    if (!form.department)                                       e.department      = "Department is required";
+    if (!isEdit && !form.password)                              e.password        = "Password is required";
+    if (!isEdit && form.password && form.password.length < 6)  e.password        = "Min 6 characters";
+    if (!isEdit && form.password !== form.confirmPassword)      e.confirmPassword = "Passwords do not match";
+    return e;
+  };
 
-  // Handle input change for new admin form
-  const handleInputChange = (e) => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setNewAdmin(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear error for this field
-    if (formErrors[name]) {
-      setFormErrors(prev => ({
-        ...prev,
-        [name]: ""
-      }));
-    }
+    setForm(p => ({ ...p, [name]: value }));
+    if (errors[name]) setErrors(p => ({ ...p, [name]: "" }));
   };
 
-  // Handle permission change
-  const handlePermissionChange = (permission) => {
-    setNewAdmin(prev => ({
-      ...prev,
-      permissions: {
-        ...prev.permissions,
-        [permission]: !prev.permissions[permission]
-      }
-    }));
-  };
-
-  // Handle full access toggle
-  const handleFullAccessToggle = () => {
-    const newFullAccess = !newAdmin.permissions.fullAccess;
-    setNewAdmin(prev => ({
-      ...prev,
-      permissions: {
-        createExam: newFullAccess,
-        manageStudents: newFullAccess,
-        viewResults: newFullAccess,
-        manageQuestions: newFullAccess,
-        fullAccess: newFullAccess
-      }
-    }));
-  };
-
-  // Validate form
-  const validateForm = () => {
-    const errors = {};
-    
-    if (!newAdmin.firstName.trim()) {
-      errors.firstName = "First name is required";
-    }
-    
-    if (!newAdmin.lastName.trim()) {
-      errors.lastName = "Last name is required";
-    }
-    
-    if (!newAdmin.email.trim()) {
-      errors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(newAdmin.email)) {
-      errors.email = "Email is invalid";
-    }
-    
-    if (!newAdmin.phone.trim()) {
-      errors.phone = "Phone number is required";
-    }
-    
-    if (!newAdmin.department) {
-      errors.department = "Department is required";
-    }
-    
-    if (!newAdmin.password) {
-      errors.password = "Password is required";
-    } else if (newAdmin.password.length < 6) {
-      errors.password = "Password must be at least 6 characters";
-    }
-    
-    if (newAdmin.password !== newAdmin.confirmPassword) {
-      errors.confirmPassword = "Passwords do not match";
-    }
-    
-    return errors;
-  };
-
-  // Handle add admin
-  const handleAddAdmin = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate form
-    const errors = validateForm();
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      return;
+    const errs = validate();
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+
+    const body = { email: form.email.trim(), department: form.department };
+    if (!isEdit || form.password) body.password = form.password;
+
+    if (isEdit) {
+      const res = await dispatch(updateAdmin({ id: editAdmin._id, body }));
+      if (res.meta.requestStatus === "fulfilled") onSaved("updated");
+    } else {
+      const res = await dispatch(createAdmin(body));
+      if (res.meta.requestStatus === "fulfilled") onSaved("created");
     }
-
-    setIsSubmitting(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      // Create new admin object
-      const newAdminObj = {
-        id: adminsList.length + 1,
-        name: `${newAdmin.firstName} ${newAdmin.lastName}`,
-        email: newAdmin.email,
-        department: newAdmin.department,
-        students: 0,
-        exams: 0,
-        status: "active",
-        lastActive: "Just now",
-        phone: newAdmin.phone,
-        joinDate: new Date().toISOString().split('T')[0],
-        permissions: Object.keys(newAdmin.permissions)
-          .filter(key => newAdmin.permissions[key] && key !== 'fullAccess')
-          .map(key => {
-            switch(key) {
-              case 'createExam': return 'create_exam';
-              case 'manageStudents': return 'manage_students';
-              case 'viewResults': return 'view_results';
-              case 'manageQuestions': return 'manage_questions';
-              default: return key;
-            }
-          })
-      };
-
-      // Add to admins list
-      setAdminsList(prev => [...prev, newAdminObj]);
-      
-      // Show success message
-      setSuccessMessage("Admin added successfully!");
-      
-      // Reset form and close modal after 2 seconds
-      setTimeout(() => {
-        setIsSubmitting(false);
-        setShowAddModal(false);
-        setSuccessMessage("");
-        // Reset form
-        setNewAdmin({
-          firstName: "",
-          lastName: "",
-          email: "",
-          phone: "",
-          department: "",
-          password: "",
-          confirmPassword: "",
-          permissions: {
-            createExam: false,
-            manageStudents: false,
-            viewResults: false,
-            manageQuestions: false,
-            fullAccess: false
-          }
-        });
-        setFormErrors({});
-      }, 2000);
-    }, 1500);
   };
 
-  // Handle view admin
-  const handleViewAdmin = (admin) => {
-    setSelectedAdmin(admin);
-    setShowViewModal(true);
-  };
-
-  // Handle edit admin
-  const handleEditAdmin = (admin) => {
-    setSelectedAdmin(admin);
-    // Populate edit form with admin data
-    setShowEditModal(true);
-  };
-
-  // Handle delete admin
-  const handleDeleteAdmin = (admin) => {
-    setSelectedAdmin(admin);
-    setShowDeleteModal(true);
-  };
-
-  // Confirm delete admin
-  const confirmDeleteAdmin = () => {
-    setIsSubmitting(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setAdminsList(prev => prev.filter(admin => admin.id !== selectedAdmin.id));
-      setIsSubmitting(false);
-      setShowDeleteModal(false);
-      setSelectedAdmin(null);
-      setSuccessMessage("Admin deleted successfully!");
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccessMessage(""), 3000);
-    }, 1000);
-  };
-
-  // Handle status toggle
-  const handleStatusToggle = (admin) => {
-    setAdminsList(prev => 
-      prev.map(a => 
-        a.id === admin.id 
-          ? { ...a, status: a.status === 'active' ? 'inactive' : 'active' }
-          : a
-      )
-    );
-  };
-
-  // Reset filters
-  const resetFilters = () => {
-    setSearchTerm("");
-    setDepartmentFilter("all");
-    setStatusFilter("all");
-    setCurrentPage(1);
-  };
-
-  // Add Admin Modal
-  const AddAdminModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b sticky top-0 bg-white z-10">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Add New Admin</h2>
-            <button 
-              onClick={() => setShowAddModal(false)} 
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              disabled={isSubmitting}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+        <div className="px-6 py-4 border-b flex justify-between items-center">
+          <h2 className="text-lg font-bold text-gray-800">{isEdit ? "Edit Admin" : "Add New Admin"}</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        
-        <form onSubmit={handleAddAdmin} className="p-6 space-y-4">
-          {successMessage && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center space-x-2">
-              <CheckCircle className="w-5 h-5" />
-              <span>{successMessage}</span>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {errors._api && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg
+              text-sm flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" /> {errors._api}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                First Name <span className="text-red-500">*</span>
-              </label>
-              <input 
-                type="text" 
-                name="firstName"
-                value={newAdmin.firstName}
-                onChange={handleInputChange}
-                className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none ${
-                  formErrors.firstName ? 'border-red-500' : ''
-                }`}
-                placeholder="Enter first name"
-                disabled={isSubmitting}
-              />
-              {formErrors.firstName && (
-                <p className="text-red-500 text-xs mt-1">{formErrors.firstName}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Last Name <span className="text-red-500">*</span>
-              </label>
-              <input 
-                type="text" 
-                name="lastName"
-                value={newAdmin.lastName}
-                onChange={handleInputChange}
-                className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none ${
-                  formErrors.lastName ? 'border-red-500' : ''
-                }`}
-                placeholder="Enter last name"
-                disabled={isSubmitting}
-              />
-              {formErrors.lastName && (
-                <p className="text-red-500 text-xs mt-1">{formErrors.lastName}</p>
-              )}
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Email Address <span className="text-red-500">*</span>
-            </label>
-            <input 
-              type="email" 
-              name="email"
-              value={newAdmin.email}
-              onChange={handleInputChange}
-              className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none ${
-                formErrors.email ? 'border-red-500' : ''
-              }`}
-              placeholder="Enter email address"
-              disabled={isSubmitting}
-            />
-            {formErrors.email && (
-              <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
-            )}
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Phone Number <span className="text-red-500">*</span>
-            </label>
-            <input 
-              type="tel" 
-              name="phone"
-              value={newAdmin.phone}
-              onChange={handleInputChange}
-              className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none ${
-                formErrors.phone ? 'border-red-500' : ''
-              }`}
-              placeholder="Enter phone number"
-              disabled={isSubmitting}
-            />
-            {formErrors.phone && (
-              <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
-            )}
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Department <span className="text-red-500">*</span>
-            </label>
-            <select 
-              name="department"
-              value={newAdmin.department}
-              onChange={handleInputChange}
-              className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none ${
-                formErrors.department ? 'border-red-500' : ''
-              }`}
-              disabled={isSubmitting}
-            >
-              <option value="">Select Department</option>
-              <option value="Science">Science</option>
-              <option value="Commerce">Commerce</option>
-              <option value="Arts">Arts</option>
-              <option value="Engineering">Engineering</option>
+          <Field label="Email Address" required error={errors.email}>
+            <input type="email" name="email" value={form.email} onChange={handleChange}
+              placeholder="admin@example.com" disabled={loading}
+              className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none
+                focus:ring-2 focus:ring-blue-500
+                ${errors.email ? "border-red-400" : "border-gray-300"}`} />
+          </Field>
+
+          <Field label="Department" required error={errors.department}>
+            <select name="department" value={form.department} onChange={handleChange}
+              disabled={loading}
+              className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none
+                focus:ring-2 focus:ring-blue-500
+                ${errors.department ? "border-red-400" : "border-gray-300"}`}>
+              <option value="">— Select Department —</option>
+              {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
-            {formErrors.department && (
-              <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={isEdit ? "New Password (optional)" : "Password"} required={!isEdit} error={errors.password}>
+              <input type="password" name="password" value={form.password}
+                onChange={handleChange} placeholder="••••••••" disabled={loading}
+                className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none
+                  focus:ring-2 focus:ring-blue-500
+                  ${errors.password ? "border-red-400" : "border-gray-300"}`} />
+            </Field>
+            {!isEdit && (
+              <Field label="Confirm Password" required error={errors.confirmPassword}>
+                <input type="password" name="confirmPassword" value={form.confirmPassword}
+                  onChange={handleChange} placeholder="••••••••" disabled={loading}
+                  className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none
+                    focus:ring-2 focus:ring-blue-500
+                    ${errors.confirmPassword ? "border-red-400" : "border-gray-300"}`} />
+              </Field>
             )}
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Password <span className="text-red-500">*</span>
-              </label>
-              <input 
-                type="password" 
-                name="password"
-                value={newAdmin.password}
-                onChange={handleInputChange}
-                className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none ${
-                  formErrors.password ? 'border-red-500' : ''
-                }`}
-                placeholder="Enter password"
-                disabled={isSubmitting}
-              />
-              {formErrors.password && (
-                <p className="text-red-500 text-xs mt-1">{formErrors.password}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Confirm Password <span className="text-red-500">*</span>
-              </label>
-              <input 
-                type="password" 
-                name="confirmPassword"
-                value={newAdmin.confirmPassword}
-                onChange={handleInputChange}
-                className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none ${
-                  formErrors.confirmPassword ? 'border-red-500' : ''
-                }`}
-                placeholder="Confirm password"
-                disabled={isSubmitting}
-              />
-              {formErrors.confirmPassword && (
-                <p className="text-red-500 text-xs mt-1">{formErrors.confirmPassword}</p>
-              )}
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">Permissions</label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center space-x-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={newAdmin.permissions.createExam}
-                  onChange={() => handlePermissionChange('createExam')}
-                  className="rounded"
-                  disabled={isSubmitting}
-                />
-                <span className="text-sm">Create Exams</span>
-              </label>
-              <label className="flex items-center space-x-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={newAdmin.permissions.manageStudents}
-                  onChange={() => handlePermissionChange('manageStudents')}
-                  className="rounded"
-                  disabled={isSubmitting}
-                />
-                <span className="text-sm">Manage Students</span>
-              </label>
-              <label className="flex items-center space-x-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={newAdmin.permissions.viewResults}
-                  onChange={() => handlePermissionChange('viewResults')}
-                  className="rounded"
-                  disabled={isSubmitting}
-                />
-                <span className="text-sm">View Results</span>
-              </label>
-              <label className="flex items-center space-x-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={newAdmin.permissions.manageQuestions}
-                  onChange={() => handlePermissionChange('manageQuestions')}
-                  className="rounded"
-                  disabled={isSubmitting}
-                />
-                <span className="text-sm">Manage Questions</span>
-              </label>
-              <label className="flex items-center space-x-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer col-span-2">
-                <input 
-                  type="checkbox" 
-                  checked={newAdmin.permissions.fullAccess}
-                  onChange={handleFullAccessToggle}
-                  className="rounded"
-                  disabled={isSubmitting}
-                />
-                <span className="text-sm font-medium">Full Access (All permissions)</span>
-              </label>
-            </div>
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t">
-            <button 
-              type="button"
-              onClick={() => setShowAddModal(false)}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors"
-              disabled={isSubmitting}
-            >
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 flex items-start gap-2">
+            <span>ℹ️</span>
+            One admin per department. The admin will manage students only in their assigned department.
+          </div>
+
+          <div className="flex gap-3 pt-2 border-t">
+            <button type="button" onClick={onClose} disabled={loading}
+              className="flex-1 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold
+                text-gray-600 hover:bg-gray-50 transition-colors">
               Cancel
             </button>
-            <button 
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Creating...</span>
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4" />
-                  <span>Create Admin</span>
-                </>
-              )}
+            <button type="submit" disabled={loading}
+              className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold
+                hover:bg-blue-700 transition-colors flex items-center justify-center gap-2
+                disabled:opacity-50">
+              {loading
+                ? <><Loader2 className="w-4 h-4 animate-spin" />{isEdit ? "Saving…" : "Creating…"}</>
+                : <><UserPlus className="w-4 h-4" />{isEdit ? "Save Changes" : "Create Admin"}</>}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
+};
 
-  // View Admin Modal
-  const ViewAdminModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-2xl">
-        <div className="p-6 border-b">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Admin Details</h2>
-            <button onClick={() => setShowViewModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-              <X className="w-5 h-5" />
-            </button>
+// ─── VIEW MODAL ────────────────────────────────────────────────────────────────
+const ViewModal = ({ admin, onClose, onEdit }) => (
+  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+      <div className="px-6 py-4 border-b flex justify-between items-center">
+        <h2 className="text-lg font-bold text-gray-800">Admin Details</h2>
+        <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="p-6 space-y-5">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600
+            flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+            {(admin.name || admin.email || "A")[0].toUpperCase()}
+          </div>
+          <div>
+            <p className="text-lg font-bold text-gray-900">{admin.name || "—"}</p>
+            <p className="text-sm text-gray-500">{admin.email}</p>
+            <span className={`inline-flex items-center gap-1.5 mt-1 text-xs font-bold
+              px-2.5 py-1 rounded-full
+              ${admin.status === "active"
+                ? "bg-green-100 text-green-700"
+                : "bg-gray-100 text-gray-500"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full
+                ${admin.status === "active" ? "bg-green-500" : "bg-gray-400"}`} />
+              {admin.status}
+            </span>
           </div>
         </div>
-        
-        {selectedAdmin && (
-          <div className="p-6 space-y-6">
-            <div className="flex items-center space-x-4">
-              <img 
-                src={`https://ui-avatars.com/api/?name=${selectedAdmin.name}&size=80&background=0D8F81&color=fff`}
-                alt={selectedAdmin.name}
-                className="w-20 h-20 rounded-full"
-              />
-              <div>
-                <h3 className="text-xl font-bold">{selectedAdmin.name}</h3>
-                <p className="text-gray-500">{selectedAdmin.email}</p>
-                <p className="text-sm text-gray-500 mt-1">{selectedAdmin.phone}</p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-500">Department</p>
-                <p className="font-medium">{selectedAdmin.department}</p>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-500">Join Date</p>
-                <p className="font-medium">{selectedAdmin.joinDate}</p>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-500">Students Managed</p>
-                <p className="font-medium">{selectedAdmin.students}</p>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-500">Exams Created</p>
-                <p className="font-medium">{selectedAdmin.exams}</p>
-              </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: "Department",  val: admin.department || "—" },
+            { label: "Join Date",   val: admin.joinDate   || "—" },
+            { label: "Students",    val: admin.students   ?? 0   },
+            { label: "Exams",       val: admin.exams      ?? 0   },
+            { label: "Last Active", val: admin.lastActive || "—" },
+            { label: "Admin ID",    val: admin._id ? admin._id.toString().slice(-8).toUpperCase() : "—" },
+          ].map(({ label, val }) => (
+            <div key={label} className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+              <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+              <p className="font-semibold text-gray-800 text-sm">{val}</p>
             </div>
+          ))}
+        </div>
 
-            <div>
-              <h4 className="font-medium mb-2">Permissions</h4>
-              <div className="flex flex-wrap gap-2">
-                {selectedAdmin.permissions.map((perm, index) => (
-                  <span key={index} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                    {perm.replace('_', ' ')}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4 border-t">
-              <button 
-                onClick={() => {
-                  setShowViewModal(false);
-                  handleEditAdmin(selectedAdmin);
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Edit Admin
-              </button>
-              <button 
-                onClick={() => setShowViewModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-100"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // Delete Confirmation Modal
-  const DeleteConfirmationModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-md">
-        <div className="p-6">
-          <div className="flex items-center justify-center mb-4">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertCircle className="w-6 h-6 text-red-600" />
-            </div>
-          </div>
-          <h2 className="text-xl font-bold text-center mb-2">Delete Admin</h2>
-          <p className="text-gray-500 text-center mb-6">
-            Are you sure you want to delete {selectedAdmin?.name}? This action cannot be undone.
-          </p>
-          
-          <div className="flex space-x-3">
-            <button 
-              onClick={() => setShowDeleteModal(false)}
-              className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors"
-              disabled={isSubmitting}
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={confirmDeleteAdmin}
-              disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-            >
-              {isSubmitting ? 'Deleting...' : 'Delete'}
-            </button>
-          </div>
+        <div className="flex gap-3 border-t pt-4">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold
+              text-gray-600 hover:bg-gray-50 transition-colors">
+            Close
+          </button>
+          <button onClick={() => { onClose(); onEdit(admin); }}
+            className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold
+              hover:bg-blue-700 transition-colors">
+            Edit Admin
+          </button>
         </div>
       </div>
     </div>
-  );
+  </div>
+);
+
+// ─── DELETE MODAL ──────────────────────────────────────────────────────────────
+const DeleteModal = ({ admin, onClose, onDeleted }) => {
+  const dispatch = useDispatch();
+  const { loading, actionError } = useSelector(s => s.admins);
+
+  useEffect(() => () => dispatch(clearActionError()), [dispatch]);
+
+  const confirm = async () => {
+    const res = await dispatch(deleteAdminThunk(admin._id));
+    if (res.meta.requestStatus === "fulfilled") onDeleted();
+  };
 
   return (
-    <div className="p-8 space-y-6">
-      {/* Success Message */}
-      {successMessage && (
-        <div className="fixed top-4 right-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center space-x-2 shadow-lg z-50">
-          <CheckCircle className="w-5 h-5" />
-          <span>{successMessage}</span>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+        <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Trash2 className="w-6 h-6 text-red-600" />
+        </div>
+        <h2 className="text-lg font-bold text-center text-gray-800 mb-2">Delete Admin</h2>
+        <p className="text-gray-500 text-center text-sm mb-5">
+          Are you sure you want to delete <strong>{admin.name || admin.email}</strong>?
+          This action cannot be undone.
+        </p>
+        {actionError && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-2.5">
+            {actionError}
+          </div>
+        )}
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading}
+            className="flex-1 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold
+              text-gray-600 hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button onClick={confirm} disabled={loading}
+            className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold
+              hover:bg-red-700 transition-colors flex items-center justify-center gap-2
+              disabled:opacity-50">
+            {loading
+              ? <><Loader2 className="w-4 h-4 animate-spin" />Deleting…</>
+              : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═════════════════════════════════════════════════════════════════════════════
+const AdminManagement = () => {
+  const dispatch = useDispatch();
+  // ── All admin data comes from Redux store now ──────────────────────────────
+  const { list: admins, loading, error } = useSelector(s => s.admins);
+
+  const [toast,          setToast]        = useState(null);
+  const [addOpen,        setAddOpen]      = useState(false);
+  const [editAdmin,      setEditAdmin]    = useState(null);
+  const [viewAdmin,      setViewAdmin]    = useState(null);
+  const [deleteTarget,   setDeleteTarget] = useState(null);
+  const [search,         setSearch]       = useState("");
+  const [deptFilter,     setDeptFilter]   = useState("all");
+  const [statusFilter,   setStatusFilter] = useState("all");
+  const [page,           setPage]         = useState(1);
+  const PER_PAGE = 5;
+
+  // Load on mount
+  useEffect(() => { dispatch(fetchAdmins()); }, [dispatch]);
+
+  const showToast = (msg, type = "success") => setToast({ msg, type });
+
+  // ── After create/update — Redux already updated the list via extraReducers ──
+  const handleSaved = (action) => {
+    setAddOpen(false);
+    setEditAdmin(null);
+    showToast(action === "created" ? "Admin created successfully!" : "Admin updated successfully!");
+  };
+
+  // ── After delete — Redux already removed from list ──────────────────────────
+  const handleDeleted = () => {
+    setDeleteTarget(null);
+    showToast("Admin deleted successfully!");
+  };
+
+  // ── Toggle status ───────────────────────────────────────────────────────────
+  const handleToggleStatus = async (admin) => {
+    const newStatus = admin.status === "active" ? "inactive" : "active";
+    const res = await dispatch(toggleAdminStatus({ id: admin._id, status: newStatus }));
+    if (res.meta.requestStatus === "fulfilled") {
+      showToast(`Admin marked as ${newStatus}.`);
+    } else {
+      showToast(res.payload || "Failed to update status.", "error");
+    }
+  };
+
+  // ── Filter + paginate ───────────────────────────────────────────────────────
+  const filtered = admins.filter(a => {
+    const q   = search.toLowerCase();
+    const ms  = !q || (a.name || "").toLowerCase().includes(q) || a.email.toLowerCase().includes(q);
+    const md  = deptFilter   === "all" || a.department === deptFilter;
+    const mst = statusFilter === "all" || a.status     === statusFilter;
+    return ms && md && mst;
+  });
+
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const pageItems  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  const resetFilters = () => {
+    setSearch(""); setDeptFilter("all"); setStatusFilter("all"); setPage(1);
+  };
+
+  // ── Stats ───────────────────────────────────────────────────────────────────
+  const activeCount   = admins.filter(a => a.status === "active").length;
+  const deptCount     = new Set(admins.map(a => a.department).filter(Boolean)).size;
+  const totalStudents = admins.reduce((s, a) => s + (a.students || 0), 0);
+
+  return (
+    <div className="p-6 lg:p-8 space-y-6">
+
+      {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Admin Management</h1>
+          <p className="text-gray-400 text-sm mt-0.5">Manage department administrators</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={() => dispatch(fetchAdmins())}
+            className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors">
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+          <button onClick={() => setAddOpen(true)}
+            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl
+              text-sm font-bold hover:bg-blue-700 transition-colors shadow-md shadow-blue-200">
+            <Plus className="w-4 h-4" /> Add Admin
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: "Total Admins",     val: loading ? "—" : admins.length,  color: "text-gray-800",   bg: "bg-gray-50"   },
+          { label: "Active",           val: loading ? "—" : activeCount,    color: "text-green-700",  bg: "bg-green-50"  },
+          { label: "Departments",      val: loading ? "—" : deptCount,      color: "text-blue-700",   bg: "bg-blue-50"   },
+          { label: "Students Managed", val: loading ? "—" : totalStudents,  color: "text-purple-700", bg: "bg-purple-50" },
+        ].map(({ label, val, color, bg }) => (
+          <div key={label} className={`${bg} border border-gray-100 rounded-2xl p-5`}>
+            <p className="text-xs text-gray-400 font-medium">{label}</p>
+            <p className={`text-2xl font-black mt-1 ${color}`}>{val}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Global fetch error */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
+          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+          <p className="text-sm text-red-700">{error}</p>
+          <button onClick={() => dispatch(fetchAdmins())}
+            className="ml-auto text-xs text-red-600 underline font-medium">Retry</button>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Admin Management</h1>
-          <p className="text-gray-500 mt-1">Manage department administrators and their permissions</p>
-        </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-lg"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add New Admin</span>
-        </button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500">Total Admins</p>
-          <p className="text-2xl font-bold">{adminsList.length}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500">Active Admins</p>
-          <p className="text-2xl font-bold text-green-600">{adminsList.filter(a => a.status === 'active').length}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500">Departments</p>
-          <p className="text-2xl font-bold text-blue-600">4</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500">Total Students Managed</p>
-          <p className="text-2xl font-bold text-purple-600">1,250</p>
-        </div>
-      </div>
-
       {/* Filters */}
-      <div className="flex flex-wrap gap-4 bg-white p-4 rounded-xl shadow-sm">
-        <div className="flex-1 min-w-[200px] flex items-center border rounded-lg px-3 py-2">
-          <Search className="w-5 h-5 text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="Search admins by name or email..." 
-            className="ml-2 flex-1 outline-none"
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 flex flex-wrap gap-3 shadow-sm">
+        <div className="flex-1 min-w-[200px] flex items-center border border-gray-200 rounded-xl px-3 py-2.5 gap-2">
+          <Search className="w-4 h-4 text-gray-400 shrink-0" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search by name or email…"
+            className="flex-1 outline-none text-sm bg-transparent" />
+          {search && (
+            <button onClick={() => setSearch("")}><X className="w-3.5 h-3.5 text-gray-400" /></button>
+          )}
         </div>
-        <select 
-          className="border rounded-lg px-3 py-2 min-w-[150px]"
-          value={departmentFilter}
-          onChange={(e) => {
-            setDepartmentFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-        >
+        <select value={deptFilter} onChange={e => { setDeptFilter(e.target.value); setPage(1); }}
+          className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none
+            focus:ring-2 focus:ring-blue-400">
           <option value="all">All Departments</option>
-          <option value="Science">Science</option>
-          <option value="Commerce">Commerce</option>
-          <option value="Arts">Arts</option>
-          <option value="Engineering">Engineering</option>
+          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
-        <select 
-          className="border rounded-lg px-3 py-2 min-w-[150px]"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setCurrentPage(1);
-          }}
-        >
+        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+          className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none
+            focus:ring-2 focus:ring-blue-400">
           <option value="all">All Status</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
-        <button 
-          className="p-2 border rounded-lg hover:bg-gray-50 transition-colors"
-          onClick={resetFilters}
-          title="Reset Filters"
-        >
-          <RefreshCw className="w-5 h-5" />
+        <button onClick={resetFilters} title="Reset filters"
+          className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors">
+          <RefreshCw className="w-4 h-4" />
         </button>
-        <button className="p-2 border rounded-lg hover:bg-gray-50 transition-colors">
-          <Download className="w-5 h-5" />
+        <button title="Export CSV" onClick={() => {
+          const csv = [
+            ["Email", "Department", "Status", "Students", "Exams", "Join Date"],
+            ...filtered.map(a => [a.email, a.department, a.status, a.students, a.exams, a.joinDate])
+          ].map(r => r.join(",")).join("\n");
+          const el = document.createElement("a");
+          el.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+          el.download = "admins.csv"; el.click();
+        }} className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors">
+          <Download className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Admins Table */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Admin</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Department</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Students</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Exams</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Join Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Last Active</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {currentItems.length > 0 ? (
-                currentItems.map((admin) => (
-                  <tr key={admin.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-3">
-                        <img 
-                          src={`https://ui-avatars.com/api/?name=${admin.name}&background=random&size=40`}
-                          alt={admin.name}
-                          className="w-10 h-10 rounded-full"
-                        />
-                        <div>
-                          <p className="font-medium">{admin.name}</p>
-                          <p className="text-sm text-gray-500">{admin.email}</p>
+      {/* Table */}
+      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="py-20 flex flex-col items-center gap-3 text-gray-400">
+            <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
+            <p className="text-sm">Loading admins…</p>
+          </div>
+        ) : pageItems.length === 0 ? (
+          <div className="py-20 text-center text-gray-400">
+            <p className="font-semibold">No admins found</p>
+            <p className="text-sm mt-1">
+              {search || deptFilter !== "all" || statusFilter !== "all"
+                ? "Try different filters"
+                : "Click 'Add Admin' to get started"}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100 text-left">
+                  {["Admin", "Department", "Students", "Exams", "Join Date", "Status", "Last Active", "Actions"].map(h => (
+                    <th key={h} className="px-5 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {pageItems.map(admin => (
+                  <tr key={admin._id} className="hover:bg-gray-50/70 transition-colors">
+
+                    {/* Admin */}
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600
+                          flex items-center justify-center text-white text-sm font-bold shrink-0">
+                          {(admin.name || admin.email || "A")[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm truncate">{admin.name || "—"}</p>
+                          <p className="text-xs text-gray-400 truncate">{admin.email}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                        {admin.department}
+
+                    {/* Dept */}
+                    <td className="px-5 py-4">
+                      <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100
+                        rounded-lg text-xs font-bold">
+                        {admin.department || "—"}
                       </span>
                     </td>
-                    <td className="px-6 py-4 font-medium">{admin.students}</td>
-                    <td className="px-6 py-4 font-medium">{admin.exams}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{admin.joinDate}</td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => handleStatusToggle(admin)}
-                        className={`px-3 py-1 rounded-full text-sm flex items-center space-x-1 w-fit transition-colors ${
-                          admin.status === 'active' 
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {admin.status === 'active' ? (
-                          <CheckCircle className="w-3 h-3" />
-                        ) : (
-                          <XCircle className="w-3 h-3" />
-                        )}
-                        <span className="capitalize">{admin.status}</span>
+
+                    <td className="px-5 py-4 text-sm font-semibold text-gray-700">{admin.students ?? 0}</td>
+                    <td className="px-5 py-4 text-sm font-semibold text-gray-700">{admin.exams    ?? 0}</td>
+                    <td className="px-5 py-4 text-xs text-gray-500">{admin.joinDate  || "—"}</td>
+
+                    {/* Status toggle */}
+                    <td className="px-5 py-4">
+                      <button onClick={() => handleToggleStatus(admin)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                          text-xs font-bold transition-colors cursor-pointer
+                          ${admin.status === "active"
+                            ? "bg-green-100 text-green-700 hover:bg-green-200"
+                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                        {admin.status === "active"
+                          ? <><CheckCircle className="w-3 h-3" /> Active</>
+                          : <><XCircle    className="w-3 h-3" /> Inactive</>}
                       </button>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{admin.lastActive}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex space-x-2">
-                        <button 
-                          onClick={() => handleViewAdmin(admin)}
-                          className="p-2 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors" 
-                          title="View Details"
-                        >
+
+                    <td className="px-5 py-4 text-xs text-gray-400">{admin.lastActive || "—"}</td>
+
+                    {/* Actions */}
+                    <td className="px-5 py-4">
+                      <div className="flex gap-1">
+                        <button onClick={() => setViewAdmin(admin)} title="View"
+                          className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors">
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button 
-                          onClick={() => handleEditAdmin(admin)}
-                          className="p-2 hover:bg-green-50 rounded-lg text-green-600 transition-colors" 
-                          title="Edit"
-                        >
+                        <button onClick={() => setEditAdmin(admin)} title="Edit"
+                          className="p-2 hover:bg-green-50 text-green-600 rounded-lg transition-colors">
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button 
-                          onClick={() => handleDeleteAdmin(admin)}
-                          className="p-2 hover:bg-red-50 rounded-lg text-red-600 transition-colors" 
-                          title="Delete"
-                        >
+                        <button onClick={() => setDeleteTarget(admin)} title="Delete"
+                          className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors">
                           <Trash2 className="w-4 h-4" />
-                        </button>
-                        <button className="p-2 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors">
-                          <MoreVertical className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
-                    No admins found matching your criteria
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
-        {filteredAdmins.length > 0 && (
-          <div className="px-6 py-4 border-t flex flex-wrap gap-4 justify-between items-center bg-gray-50">
-            <p className="text-sm text-gray-600">
-              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredAdmins.length)} of {filteredAdmins.length} entries
+        {!loading && filtered.length > PER_PAGE && (
+          <div className="px-5 py-3.5 border-t border-gray-100 bg-gray-50 flex flex-wrap
+            items-center justify-between gap-3">
+            <p className="text-xs text-gray-500">
+              Showing {(page-1)*PER_PAGE+1}–{Math.min(page*PER_PAGE, filtered.length)} of {filtered.length}
             </p>
-            <div className="flex space-x-2">
-              <button 
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
+            <div className="flex gap-1.5">
+              <button onClick={() => setPage(p => Math.max(p-1, 1))} disabled={page === 1}
+                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-100
+                  disabled:opacity-40 transition-colors">
                 Previous
               </button>
               {[...Array(totalPages)].map((_, i) => (
-                <button
-                  key={i + 1}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`px-3 py-1 rounded transition-colors ${
-                    currentPage === i + 1 
-                      ? 'bg-blue-600 text-white' 
-                      : 'border hover:bg-gray-100'
-                  }`}
-                >
-                  {i + 1}
+                <button key={i} onClick={() => setPage(i+1)}
+                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors
+                    ${page === i+1
+                      ? "bg-blue-600 text-white font-bold"
+                      : "border border-gray-200 hover:bg-gray-100"}`}>
+                  {i+1}
                 </button>
               ))}
-              <button 
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
+              <button onClick={() => setPage(p => Math.min(p+1, totalPages))} disabled={page === totalPages}
+                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-100
+                  disabled:opacity-40 transition-colors">
                 Next
               </button>
             </div>
@@ -974,9 +585,10 @@ const AdminManagement = () => {
       </div>
 
       {/* Modals */}
-      {showAddModal && <AddAdminModal />}
-      {showViewModal && <ViewAdminModal />}
-      {showDeleteModal && <DeleteConfirmationModal />}
+      {addOpen      && <AdminFormModal editAdmin={null}        onClose={() => setAddOpen(false)}      onSaved={handleSaved}   />}
+      {editAdmin    && <AdminFormModal editAdmin={editAdmin}   onClose={() => setEditAdmin(null)}      onSaved={handleSaved}   />}
+      {viewAdmin    && <ViewModal      admin={viewAdmin}       onClose={() => setViewAdmin(null)}      onEdit={setEditAdmin}   />}
+      {deleteTarget && <DeleteModal   admin={deleteTarget}    onClose={() => setDeleteTarget(null)}   onDeleted={handleDeleted} />}
     </div>
   );
 };

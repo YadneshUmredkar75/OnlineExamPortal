@@ -4,19 +4,25 @@ import {
   registerSuperAdmin,
   loginAdmin,
   loginStudent,
-  loginGeneral   // optional
+  studentRegister,
+  loginGeneral,
 } from '../controllers/authController.js';
 
 const router = express.Router();
 
-// Super Admin (only once)
+// POST /api/auth/register-superadmin   → one-time super admin setup
 router.post('/register-superadmin', registerSuperAdmin);
 
-// Role-specific logins (recommended for production apps)
+// POST /api/auth/admin/login           → admin + superadmin login
 router.post('/admin/login', loginAdmin);
+
+// POST /api/auth/student/login         → student login
 router.post('/student/login', loginStudent);
 
-// Optional: General login endpoint (useful during development)
+// POST /api/auth/student/register      → student self-registration
+router.post('/student/register', studentRegister);
+
+// POST /api/auth/login                 → general login (auto-detects role)
 router.post('/login', loginGeneral);
 
 export default router;

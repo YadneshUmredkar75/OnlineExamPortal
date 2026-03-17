@@ -10,6 +10,7 @@ import {
   FiChevronRight,
   FiLogOut,
   FiSettings,
+  FiList,
 } from "react-icons/fi";
 
 const Sidebar = () => {
@@ -21,6 +22,8 @@ const Sidebar = () => {
     { path: "/admin/view-students", name: "View Students", icon: <FiUsers /> },
     { path: "/admin/student-scores", name: "Scores", icon: <FiBarChart2 /> },
     { path: "/admin/create-exam", name: "Create Exam", icon: <FiFileText /> },
+    { path: "/admin/get-exams", name: "Exam List", icon: <FiList /> },
+     { path: "/admin/exams/:id/attempts", name: "Exam attempts", icon: <FiList /> },
   ];
 
   const bottomItems = [

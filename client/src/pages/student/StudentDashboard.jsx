@@ -1,654 +1,502 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // Add this import
+// pages/student/StudentDashboard.jsx
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import {
-  Clock,
-  Calendar,
-  Award,
-  BookOpen,
-  AlertCircle,
-  CheckCircle,
-  LogOut,
-  User,
-  Bell,
-  Menu,
-  Play,
-  FileText,
-  Camera,
-  X,
-  ChevronRight,
-  TrendingUp,
-  Target,
-  BarChart3
+  Clock, Calendar, CheckCircle, BookOpen, Play, AlertCircle,
+  Camera, X, ChevronRight, Target, TrendingUp, Award,
+  FileText, Zap, RefreshCw, Trophy, BarChart3,
 } from "lucide-react";
+import { StudentLayout } from "../../components/student/StudentLayout";
 import ExamInterface from "./ExamInterface";
 
-const StudentDashboard = () => {
-  const navigate = useNavigate(); // Add this hook
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [selectedExam, setSelectedExam] = useState(null);
-  const [showGuidelines, setShowGuidelines] = useState(false);
-  const [examStarted, setExamStarted] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [permissions, setPermissions] = useState({
-    camera: false,
-    microphone: false,
-    fullscreen: false
-  });
+// ─── Axios ─────────────────────────────────────────────────────────────────────
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api" });
+api.interceptors.request.use(cfg => {
+  const t = localStorage.getItem("token");
+  if (t) cfg.headers.Authorization = `Bearer ${t}`;
+  else { window.location.href = "/"; return Promise.reject(); }
+  return cfg;
+});
+api.interceptors.response.use(r => r, err => {
+  if (err.response?.status === 401) { localStorage.clear(); window.location.href = "/"; }
+  return Promise.reject(new Error(err.response?.data?.message || err.message));
+});
 
-  // Update current time every second
+// ─── Countdown hook ────────────────────────────────────────────────────────────
+const useCountdown = (targetDate) => {
+  const calc = () => {
+    const diff = new Date(targetDate) - new Date();
+    if (diff <= 0) return { h: 0, m: 0, s: 0, over: true };
+    return {
+      h: Math.floor(diff / 3600000),
+      m: Math.floor((diff % 3600000) / 60000),
+      s: Math.floor((diff % 60000) / 1000),
+      over: false,
+    };
+  };
+  const [cd, setCd] = useState(calc);
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    const t = setInterval(() => setCd(calc()), 1000);
+    return () => clearInterval(t);
+  }, [targetDate]);
+  return cd;
+};
 
-  // Mock student data
-  const studentInfo = {
-    name: "Tejas Khope",
-    enrollmentNo: "TGPCET2024001",
-    department: "Computer Science",
-    semester: "4th Semester",
-    email: "tejas.khope@tgpcet.edu.in",
-    avatar: "https://ui-avatars.com/api/?name=Tejas+Khope&background=0D8F81&color=fff&size=100"
-  };
+// ─── Status helpers ────────────────────────────────────────────────────────────
+const statusCfg = {
+  active:    { label: "Live Now",  bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500",  border: "border-green-200" },
+  upcoming:  { label: "Upcoming",  bg: "bg-blue-100",   text: "text-blue-700",   dot: "bg-blue-500",   border: "border-blue-200"  },
+  completed: { label: "Completed", bg: "bg-gray-100",   text: "text-gray-500",   dot: "bg-gray-400",   border: "border-gray-200"  },
+};
 
-  // Mock notifications
-  const notifications = [
-    { id: 1, message: "Exam starts in 30 minutes", type: "warning", time: "5 min ago" },
-    { id: 2, message: "Results for Computer Networks published", type: "success", time: "1 hour ago" },
-    { id: 3, message: "New exam scheduled for next week", type: "info", time: "2 hours ago" }
-  ];
+const fmt = (iso, opts) => new Date(iso).toLocaleString("en-IN", opts);
 
-  // Mock exams data
-  const examsData = {
-    upcoming: [
-      {
-        id: 1,
-        title: "Data Structures & Algorithms",
-        subject: "Computer Science",
-        scheduledDate: "2024-02-25",
-        scheduledTime: "10:00 AM",
-        duration: 120,
-        totalQuestions: 50,
-        totalMarks: 100,
-        status: "upcoming",
-        room: "Hall A",
-        instructor: "Dr. Sharma"
-      },
-      {
-        id: 2,
-        title: "Database Management Systems",
-        subject: "Computer Science",
-        scheduledDate: "2024-02-28",
-        scheduledTime: "2:00 PM",
-        duration: 90,
-        totalQuestions: 40,
-        totalMarks: 80,
-        status: "upcoming",
-        room: "Lab 3",
-        instructor: "Prof. Patel"
-      }
-    ],
-    active: [
-      {
-        id: 3,
-        title: "Operating Systems",
-        subject: "Computer Science",
-        scheduledDate: "2024-02-23",
-        scheduledTime: "11:00 AM",
-        duration: 120,
-        totalQuestions: 45,
-        totalMarks: 90,
-        status: "active",
-        room: "Hall B",
-        instructor: "Dr. Kumar",
-        instructions: [
-          "This exam has 45 multiple choice questions.",
-          "Each question carries 2 marks.",
-          "No negative marking for wrong answers.",
-          "Camera must remain active throughout.",
-          "Face and eye movements are monitored.",
-          "Looking away from screen counts as violation.",
-          "Multiple faces detected will terminate exam.",
-          "After 3 violations, exam auto-terminates."
-        ]
-      }
-    ],
-    completed: [
-      {
-        id: 4,
-        title: "Computer Networks",
-        subject: "Computer Science",
-        scheduledDate: "2024-02-20",
-        scheduledTime: "9:00 AM",
-        duration: 120,
-        totalQuestions: 50,
-        totalMarks: 100,
-        status: "completed",
-        score: 85,
-        totalScore: 100,
-        percentage: 85
-      }
-    ]
-  };
-
-  // Stats calculation with additional metrics
-  const stats = {
-    upcoming: examsData.upcoming.length,
-    active: examsData.active.length,
-    completed: examsData.completed.length,
-    total: examsData.upcoming.length + examsData.active.length + examsData.completed.length,
-    averageScore: 85,
-    attendance: 92
-  };
-
-  // Handle exam start
-  const handleStartExam = (exam) => {
-    setSelectedExam(exam);
-    setShowGuidelines(true);
-  };
-
-  // Handle permission check
-  const checkPermissions = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        },
-        audio: true
-      });
-
-      setPermissions({ camera: true, microphone: true });
-
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
-        setPermissions(prev => ({ ...prev, fullscreen: true }));
-      }
-
-      setShowGuidelines(false);
-      setExamStarted(true);
-
-    } catch (error) {
-      alert("Camera and microphone access are required to start the exam.");
-    }
-  };
-
-  // Handle exam end
-  const handleExamEnd = () => {
-    setExamStarted(false);
-    setSelectedExam(null);
-  };
-
-  // Handle logout
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("userRole");
-    navigate("/");
-  };
-
-  // Guidelines Modal - Improved with better styling
-  const GuidelinesView = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-2xl flex flex-col max-h-[90vh] shadow-2xl">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">Exam Guidelines</h2>
-              <p className="text-gray-500 mt-1">{selectedExam?.title}</p>
-            </div>
-            <button
-              onClick={() => {
-                setShowGuidelines(false);
-                setSelectedExam(null);
-              }}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-6">
-            {/* Exam Info Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-center space-x-2 mb-2">
-                  <Clock className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-600">Duration</span>
-                </div>
-                <p className="text-xl font-bold text-gray-800">{selectedExam?.duration} mins</p>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <div className="flex items-center space-x-2 mb-2">
-                  <FileText className="w-4 h-4 text-purple-600" />
-                  <span className="text-sm font-medium text-purple-600">Questions</span>
-                </div>
-                <p className="text-xl font-bold text-gray-800">{selectedExam?.totalQuestions}</p>
-              </div>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <div className="flex items-center space-x-2 mb-2">
-                  <Award className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-medium text-green-600">Total Marks</span>
-                </div>
-                <p className="text-xl font-bold text-gray-800">{selectedExam?.totalMarks}</p>
-              </div>
-              <div className="bg-orange-50 p-4 rounded-lg">
-                <div className="flex items-center space-x-2 mb-2">
-                  <BookOpen className="w-4 h-4 text-orange-600" />
-                  <span className="text-sm font-medium text-orange-600">Subject</span>
-                </div>
-                <p className="text-sm font-bold text-gray-800">{selectedExam?.subject}</p>
-              </div>
-            </div>
-
-            {/* Instructions */}
-            <div className="bg-gray-50 p-5 rounded-lg">
-              <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
-                <AlertCircle className="w-5 h-5 text-blue-600 mr-2" />
-                Important Instructions
-              </h3>
-              <ul className="space-y-3">
-                {selectedExam?.instructions.map((instruction, index) => (
-                  <li key={index} className="flex items-start space-x-2">
-                    <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0 text-xs font-medium">
-                      {index + 1}
-                    </span>
-                    <span className="text-sm text-gray-600">{instruction}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Proctoring Rules */}
-            <div className="bg-red-50 border border-red-200 rounded-lg p-5">
-              <h3 className="font-semibold text-red-700 mb-3 flex items-center">
-                <Camera className="w-5 h-5 mr-2" />
-                Proctoring Rules
-              </h3>
-              <div className="grid grid-cols-2 gap-3 text-sm text-red-700">
-                <p className="flex items-center">• Face must be visible</p>
-                <p className="flex items-center">• Eyes on screen always</p>
-                <p className="flex items-center">• No multiple faces</p>
-                <p className="flex items-center">• No tab switching</p>
-              </div>
-              <p className="text-xs font-bold text-red-700 mt-3 bg-red-100 p-2 rounded">
-                ⚠️ After 3 violations, exam auto-terminates!
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end space-x-3">
-          <button
-            onClick={() => {
-              setShowGuidelines(false);
-              setSelectedExam(null);
-            }}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={checkPermissions}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-          >
-            <Camera className="w-4 h-4" />
-            <span>Start Exam</span>
-          </button>
-        </div>
+// ─── Stat Card ─────────────────────────────────────────────────────────────────
+const StatCard = ({ label, value, icon: Icon, color, bg, sub }) => (
+  <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div className="flex items-start justify-between">
+      <div>
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+        <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
+        {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      </div>
+      <div className={`w-11 h-11 ${bg} rounded-xl flex items-center justify-center`}>
+        <Icon className={`w-5 h-5 ${color}`} />
       </div>
     </div>
-  );
+  </div>
+);
 
-  // Notifications Panel
-  const NotificationsPanel = () => (
-    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold text-gray-800">Notifications</h3>
-          <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">3 new</span>
+// ─── Countdown Badge ────────────────────────────────────────────────────────────
+const CountdownBadge = ({ startTime }) => {
+  const { h, m, s, over } = useCountdown(startTime);
+  if (over) return <span className="text-xs font-mono font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg">Starting…</span>;
+  return (
+    <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-lg">
+      {h > 0 ? `${h}h ` : ""}{String(m).padStart(2,"0")}m {String(s).padStart(2,"0")}s
+    </span>
+  );
+};
+
+// ─── Guidelines Modal ──────────────────────────────────────────────────────────
+const GuidelinesModal = ({ exam, onStart, onClose, starting }) => (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl">
+      <div className="p-6 border-b flex justify-between items-start">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">Before You Begin</h2>
+          <p className="text-sm text-blue-600 font-semibold mt-0.5">{exam?.subject}</p>
+        </div>
+        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { icon: Clock,    label: "Duration",  val: `${exam?.duration} min`,       bg: "bg-blue-50 text-blue-600"   },
+            { icon: FileText, label: "Questions", val: exam?.questionCount ?? "—",     bg: "bg-purple-50 text-purple-600"},
+            { icon: Award,    label: "Per Q",     val: "2 marks",                      bg: "bg-green-50 text-green-600" },
+            { icon: Calendar, label: "Ends",      val: fmt(exam?.endTime, { hour:"2-digit", minute:"2-digit", hour12:true }), bg: "bg-orange-50 text-orange-600" },
+          ].map(({ icon: Icon, label, val, bg }) => (
+            <div key={label} className={`${bg} rounded-xl p-3.5 flex items-center gap-3`}>
+              <Icon className="w-4 h-4 shrink-0" />
+              <div><p className="text-[11px] font-medium opacity-70">{label}</p><p className="text-sm font-bold">{val}</p></div>
+            </div>
+          ))}
+        </div>
+        <div className="bg-slate-50 rounded-xl p-4">
+          <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-3">Exam Rules</p>
+          <ul className="space-y-2">
+            {[
+              "Camera must stay active — face must be visible at all times",
+              "Do not switch tabs or exit fullscreen during the exam",
+              "Only one person should be visible to the camera",
+              "No negative marking — attempt all questions",
+              "3 proctoring violations = automatic termination",
+            ].map((r, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-sm text-slate-600">
+                <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center
+                  justify-center shrink-0 text-[10px] font-bold mt-0.5">{i+1}</span>
+                {r}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2.5">
+          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+          <p className="text-xs text-red-700 font-medium">
+            Clicking "Start Exam" will request camera access and enter fullscreen mode.
+          </p>
         </div>
       </div>
-      <div className="max-h-96 overflow-y-auto">
-        {notifications.map(notification => (
-          <div key={notification.id} className="p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
-            <div className="flex space-x-3">
-              <div className={`p-2 rounded-lg ${notification.type === 'warning' ? 'bg-yellow-100' :
-                  notification.type === 'success' ? 'bg-green-100' : 'bg-blue-100'
-                }`}>
-                {notification.type === 'warning' ?
-                  <AlertCircle className="w-4 h-4 text-yellow-600" /> :
-                  notification.type === 'success' ?
-                    <CheckCircle className="w-4 h-4 text-green-600" /> :
-                    <Bell className="w-4 h-4 text-blue-600" />
-                }
-              </div>
-              <div>
-                <p className="text-sm text-gray-700">{notification.message}</p>
-                <p className="text-xs text-gray-400 mt-1">{notification.time}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="p-3 text-center border-t border-gray-200">
-        <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-          View All Notifications
+      <div className="p-5 border-t flex gap-3">
+        <button onClick={onClose}
+          className="flex-1 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold
+            text-gray-600 hover:bg-gray-50 transition-colors">
+          Not Now
+        </button>
+        <button onClick={onStart} disabled={starting}
+          className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold
+            hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-md">
+          {starting ? <><RefreshCw className="w-4 h-4 animate-spin" />Starting…</> : <><Camera className="w-4 h-4" />Start Exam</>}
         </button>
       </div>
     </div>
-  );
+  </div>
+);
+
+// ─── Exam Card ─────────────────────────────────────────────────────────────────
+const ExamCard = ({ exam, onStart, onViewResult }) => {
+  const s = statusCfg[exam.status] || statusCfg.upcoming;
+  const isActive   = exam.status === "active";
+  const isUpcoming = exam.status === "upcoming";
+  const isDone     = exam.status === "completed";
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header - Enhanced */}
-      <header className="bg-white border-b border-gray-200 shadow-sm px-6 py-3 sticky top-0 z-40">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <Menu className="w-5 h-5 text-gray-600" />
-            </button>
+    <div className={`bg-white rounded-2xl border-2 ${isActive ? "border-green-300 shadow-green-100" : "border-gray-100"}
+      shadow-sm hover:shadow-md transition-all overflow-hidden`}>
+      {/* Top stripe */}
+      <div className={`h-1 ${isActive ? "bg-green-500" : isUpcoming ? "bg-blue-500" : "bg-gray-300"}`} />
+
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-gray-900 text-base truncate">{exam.subject}</h3>
+            <p className="text-xs text-gray-400 mt-0.5">{exam.department} Department</p>
+          </div>
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
+            shrink-0 ${s.bg} ${s.text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${isActive ? "animate-pulse" : ""}`} />
+            {s.label}
+          </span>
+        </div>
+
+        {/* Info chips */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <span className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-lg">
+            <Clock className="w-3 h-3" /> {exam.duration} min
+          </span>
+          <span className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-lg">
+            <FileText className="w-3 h-3" /> {exam.questionCount} Qs
+          </span>
+          <span className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-lg">
+            <Award className="w-3 h-3" /> {exam.questionCount * 2} marks
+          </span>
+        </div>
+
+        {/* Time info */}
+        <div className="mb-4 p-3 bg-gray-50 rounded-xl space-y-1.5">
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-400">Starts</span>
+            <span className="font-semibold text-gray-700">
+              {fmt(exam.startTime, { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit", hour12:true })}
+            </span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-400">Ends</span>
+            <span className="font-semibold text-gray-700">
+              {fmt(exam.endTime, { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit", hour12:true })}
+            </span>
+          </div>
+          {isUpcoming && (
+            <div className="flex justify-between text-xs pt-1 border-t border-gray-200">
+              <span className="text-gray-400">Starts in</span>
+              <CountdownBadge startTime={exam.startTime} />
+            </div>
+          )}
+        </div>
+
+        {/* CTA */}
+        {isActive && (
+          <button onClick={() => onStart(exam)}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-green-600
+              hover:bg-green-700 text-white text-sm font-bold rounded-xl shadow-md transition-colors">
+            <Play className="w-4 h-4 fill-white" /> Start Exam Now
+          </button>
+        )}
+        {isUpcoming && (
+          <div className="w-full py-2.5 text-center text-sm text-gray-400 bg-gray-50 rounded-xl border border-gray-100 font-medium">
+            Not started yet
+          </div>
+        )}
+        {isDone && (
+          <button onClick={() => onViewResult(exam)}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-50
+              hover:bg-indigo-100 text-indigo-700 text-sm font-bold rounded-xl transition-colors">
+            <BarChart3 className="w-4 h-4" /> View Result
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN DASHBOARD
+// ═════════════════════════════════════════════════════════════════════════════
+const StudentDashboard = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const t = localStorage.getItem("token");
+    const r = localStorage.getItem("userRole");
+    if (!t || r !== "student") navigate("/");
+  }, []); // eslint-disable-line
+
+  const studentName = localStorage.getItem("studentName") || "Student";
+  const studentId   = localStorage.getItem("studentId")   || "";
+
+  const [exams,         setExams]         = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState("");
+  const [selectedExam,  setSelectedExam]  = useState(null);
+  const [showGuidelines,setShowGuidelines]= useState(false);
+  const [starting,      setStarting]      = useState(false);
+  const [examStarted,   setExamStarted]   = useState(false);
+  const [currentTime,   setCurrentTime]   = useState(new Date());
+
+  useEffect(() => { const t = setInterval(() => setCurrentTime(new Date()), 60000); return () => clearInterval(t); }, []);
+
+  const loadExams = useCallback(async () => {
+    setLoading(true); setError("");
+    try {
+      const res = await api.get("/student/exams");
+      setExams(res.data.exams || []);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadExams(); }, [loadExams]);
+
+  // Check if any upcoming exam starts today
+  const isToday = (iso) => {
+    const d = new Date(iso);
+    const n = new Date();
+    return d.getDate() === n.getDate() && d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+  };
+
+  const activeExams   = exams.filter(e => e.status === "active");
+  const upcomingExams = exams.filter(e => e.status === "upcoming");
+  const completedExams = exams.filter(e => e.status === "completed");
+  const todayExams    = upcomingExams.filter(e => isToday(e.startTime));
+
+  const handleStartExam = (exam) => { setSelectedExam(exam); setShowGuidelines(true); };
+
+  const beginExam = async () => {
+    setStarting(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(t => t.stop());
+      await document.documentElement.requestFullscreen?.().catch(() => {});
+      setShowGuidelines(false);
+      setExamStarted(true);
+    } catch {
+      alert("Please allow camera access to start the exam.");
+    } finally { setStarting(false); }
+  };
+
+  if (examStarted && selectedExam) {
+    return <ExamInterface exam={selectedExam} onExamEnd={() => { setExamStarted(false); setSelectedExam(null); loadExams(); }} />;
+  }
+
+  const greet = () => {
+    const h = currentTime.getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  };
+
+  return (
+    <StudentLayout>
+      <div className="p-6 max-w-7xl mx-auto">
+
+        {/* ── WELCOME BANNER ─────────────────────────────────────────────── */}
+        <div className="relative overflow-hidden bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700
+          rounded-2xl p-6 mb-7 text-white shadow-xl">
+          {/* Decorative circles */}
+          <div className="absolute -top-8 -right-8 w-40 h-40 bg-white/5 rounded-full" />
+          <div className="absolute -bottom-10 -right-16 w-56 h-56 bg-white/5 rounded-full" />
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold text-blue-600">TGPCET</h1>
-              <p className="text-xs text-gray-500">Online Examination System</p>
+              <p className="text-blue-200 text-sm font-medium">{greet()},</p>
+              <h1 className="text-2xl font-bold mt-0.5">{studentName.split(" ")[0]} 👋</h1>
+              <p className="text-blue-100 text-sm mt-2">
+                {activeExams.length > 0
+                  ? `🔴 ${activeExams.length} exam${activeExams.length>1?"s":""} LIVE right now — start immediately!`
+                  : todayExams.length > 0
+                  ? `📅 ${todayExams.length} exam${todayExams.length>1?"s":""} scheduled for today`
+                  : `You have ${upcomingExams.length} upcoming exam${upcomingExams.length!==1?"s":""}.`
+                }
+              </p>
             </div>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            {/* Time Display */}
-            <div className="text-right hidden md:block">
-              <p className="text-sm font-medium text-gray-700">{currentTime.toLocaleDateString()}</p>
-              <p className="text-xs text-gray-500">{currentTime.toLocaleTimeString()}</p>
-            </div>
-
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
-              >
-                <Bell className="w-5 h-5 text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              {showNotifications && <NotificationsPanel />}
-            </div>
-
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="flex">
-        {/* Sidebar - Enhanced */}
-        <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 min-h-screen transition-all duration-300 hidden lg:block`}>
-          <div className="p-4">
-            {/* Profile Summary - Only when sidebar is open */}
-            {sidebarOpen && (
-              <div className="text-center mb-6 pb-6 border-b border-gray-200">
-                <img
-                  src={studentInfo.avatar}
-                  alt={studentInfo.name}
-                  className="w-20 h-20 rounded-full mx-auto mb-3 border-3 border-blue-500"
-                />
-                <p className="font-semibold text-gray-800">{studentInfo.name}</p>
-                <p className="text-xs text-gray-500 mt-1">{studentInfo.department}</p>
-                <p className="text-xs text-gray-400 mt-1">{studentInfo.semester}</p>
+            <div className="flex gap-3 shrink-0">
+              <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-center">
+                <p className="text-xs text-blue-200">Student ID</p>
+                <p className="font-mono font-bold text-lg">{studentId}</p>
               </div>
-            )}
-
-            {/* Navigation */}
-            <nav className="space-y-1">
-              <button 
-                onClick={() => navigate('/student/dashboard')}
-                className="w-full flex items-center space-x-3 px-4 py-3 bg-blue-50 text-blue-600 rounded-lg transition-colors"
-              >
-                <BookOpen className="w-5 h-5" />
-                {sidebarOpen && <span className="font-medium">Dashboard</span>}
-                {sidebarOpen && <ChevronRight className="w-4 h-4 ml-auto" />}
-              </button>
-
-
-              {/* FIXED: Results button with proper navigation */}
-              <button
-                onClick={() => navigate('/student/results')}
-                className="w-full flex items-center space-x-3 px-4 py-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Award className="w-5 h-5" />
-                {sidebarOpen && <span>Results</span>}
-              </button>
-              {/* Logout Button */}
-              <div className="pt-4 mt-4 border-t border-gray-200">
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <LogOut className="w-5 h-5" />
-                  {sidebarOpen && <span>Logout</span>}
-                </button>
+              <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-center">
+                <p className="text-xs text-blue-200">
+                  {currentTime.toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric" })}
+                </p>
+                <p className="font-mono font-bold text-lg">{currentTime.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", hour12: true })}</p>
               </div>
-            </nav>
+            </div>
           </div>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 p-6">
-          {/* Welcome Header - Enhanced */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-xl mb-6 shadow-lg">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold">Welcome back, {studentInfo.name.split(' ')[0]}! 👋</h2>
-                <p className="text-blue-100 mt-1">Ready for your exams today? You have {stats.active} active exam(s).</p>
-              </div>
-              <div className="bg-white/20 p-3 rounded-lg">
-                <Target className="w-8 h-8" />
-              </div>
-            </div>
+        {/* ── STATS ──────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
+          <StatCard label="Total Exams"  value={loading ? "—" : exams.length}          icon={BookOpen}     color="text-gray-700"   bg="bg-gray-100"   />
+          <StatCard label="Upcoming"     value={loading ? "—" : upcomingExams.length}   icon={Calendar}     color="text-blue-600"   bg="bg-blue-50"    sub={todayExams.length ? `${todayExams.length} today` : undefined} />
+          <StatCard label="Live Now"     value={loading ? "—" : activeExams.length}     icon={Zap}          color="text-green-600"  bg="bg-green-50"   />
+          <StatCard label="Completed"    value={loading ? "—" : completedExams.length}  icon={CheckCircle}  color="text-purple-600" bg="bg-purple-50"  />
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+            <p className="text-sm text-red-700">{error}</p>
+            <button onClick={loadExams} className="ml-auto text-xs text-red-600 underline font-medium">Retry</button>
           </div>
+        )}
 
-          {/* Stats Cards - Enhanced with better visuals */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-xl border border-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-gray-500">Upcoming</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-1">{stats.upcoming}</p>
-                </div>
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Calendar className="w-5 h-5 text-blue-600" />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">Next: Feb 25, 10:00 AM</p>
+        {/* ── LIVE EXAMS ──────────────────────────────────────────────────── */}
+        {activeExams.length > 0 && (
+          <section className="mb-7">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+              <h2 className="text-base font-bold text-gray-800">Live Exams</h2>
+              <span className="text-xs bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full">
+                {activeExams.length} Active
+              </span>
             </div>
-
-            <div className="bg-white p-4 rounded-xl border border-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-gray-500">Active</p>
-                  <p className="text-2xl font-bold text-green-600 mt-1">{stats.active}</p>
-                </div>
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <Play className="w-5 h-5 text-green-600" />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">In progress now</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {activeExams.map(e => (
+                <ExamCard key={e._id} exam={e} onStart={handleStartExam} onViewResult={e => navigate("/student/results")} />
+              ))}
             </div>
+          </section>
+        )}
 
-            <div className="bg-white p-4 rounded-xl border border-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-gray-500">Completed</p>
-                  <p className="text-2xl font-bold text-purple-600 mt-1">{stats.completed}</p>
-                </div>
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <CheckCircle className="w-5 h-5 text-purple-600" />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">Avg. Score: {stats.averageScore}%</p>
+        {/* ── TODAY'S EXAMS ────────────────────────────────────────────────── */}
+        {todayExams.length > 0 && (
+          <section className="mb-7">
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-base font-bold text-gray-800">Today's Exams</h2>
+              <span className="text-xs bg-blue-100 text-blue-700 font-bold px-2.5 py-1 rounded-full">
+                {todayExams.length} Scheduled
+              </span>
             </div>
-
-            <div className="bg-white p-4 rounded-xl border border-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-gray-500">Attendance</p>
-                  <p className="text-2xl font-bold text-orange-600 mt-1">{stats.attendance}%</p>
-                </div>
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <TrendingUp className="w-5 h-5 text-orange-600" />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">This semester</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {todayExams.map(e => (
+                <ExamCard key={e._id} exam={e} onStart={handleStartExam} onViewResult={() => navigate("/student/results")} />
+              ))}
             </div>
+          </section>
+        )}
 
-            <div className="bg-white p-4 rounded-xl border border-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-gray-500">Total Exams</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-1">{stats.total}</p>
-                </div>
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <BookOpen className="w-5 h-5 text-gray-600" />
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">All time</p>
+        {/* ── ALL UPCOMING ─────────────────────────────────────────────────── */}
+        {upcomingExams.filter(e => !isToday(e.startTime)).length > 0 && (
+          <section className="mb-7">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold text-gray-800">Upcoming Exams</h2>
+              <button onClick={() => navigate("/student/exams")}
+                className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1">
+                View All <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-          </div>
-
-          {/* Active Exams Section - Enhanced */}
-          {examsData.active.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">Active Exams</h3>
-                <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Live Now</span>
-              </div>
-
-              {examsData.active.map(exam => (
-                <div key={exam.id} className="border border-gray-200 rounded-lg p-5 hover:border-blue-300 transition-colors">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h4 className="font-semibold text-gray-800 text-lg">{exam.title}</h4>
-                        <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">Active</span>
-                      </div>
-                      <p className="text-sm text-gray-500 mb-3">{exam.subject} • {exam.room} • {exam.instructor}</p>
-
-                      <div className="flex flex-wrap gap-4">
-                        <span className="text-xs flex items-center text-gray-600">
-                          <Clock className="w-3 h-3 mr-1" />{exam.duration} mins
-                        </span>
-                        <span className="text-xs flex items-center text-gray-600">
-                          <FileText className="w-3 h-3 mr-1" />{exam.totalQuestions} Questions
-                        </span>
-                        <span className="text-xs flex items-center text-gray-600">
-                          <Award className="w-3 h-3 mr-1" />{exam.totalMarks} Marks
-                        </span>
-                      </div>
-
-                      <div className="mt-3 p-2 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <p className="text-xs text-yellow-700 flex items-center">
-                          <Camera className="w-3 h-3 mr-1" />
-                          Face & eye tracking active • 3 violations = auto-termination
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleStartExam(exam)}
-                      className="w-full md:w-auto bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 shadow-md"
-                    >
-                      <Play className="w-4 h-4" />
-                      <span className="font-medium">Start Exam</span>
-                    </button>
+            <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+              {upcomingExams.filter(e => !isToday(e.startTime)).slice(0, 5).map((exam, i, arr) => (
+                <div key={exam._id} className={`flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors
+                  ${i < arr.length - 1 ? "border-b border-gray-100" : ""}`}>
+                  <div className="w-10 h-10 bg-blue-50 border border-blue-100 rounded-xl
+                    flex items-center justify-center shrink-0">
+                    <BookOpen className="w-5 h-5 text-blue-500" />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 text-sm truncate">{exam.subject}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {fmt(exam.startTime, { weekday:"short", day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit", hour12:true })}
+                       · {exam.duration} min · {exam.questionCount} Qs
+                    </p>
+                  </div>
+                  <CountdownBadge startTime={exam.startTime} />
                 </div>
               ))}
             </div>
-          )}
+          </section>
+        )}
 
-          {/* Upcoming Exams Section */}
-          {examsData.upcoming.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Upcoming Exams</h3>
-              <div className="space-y-4">
-                {examsData.upcoming.map(exam => (
-                  <div key={exam.id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="font-semibold text-gray-800">{exam.title}</h4>
-                        <p className="text-sm text-gray-500 mt-1">{exam.subject}</p>
-                        <div className="flex space-x-4 mt-2">
-                          <span className="text-xs flex items-center text-gray-600">
-                            <Calendar className="w-3 h-3 mr-1" />{exam.scheduledDate}
-                          </span>
-                          <span className="text-xs flex items-center text-gray-600">
-                            <Clock className="w-3 h-3 mr-1" />{exam.scheduledTime}
-                          </span>
-                          <span className="text-xs flex items-center text-gray-600">
-                            <FileText className="w-3 h-3 mr-1" />{exam.duration} mins
-                          </span>
-                        </div>
-                      </div>
-                      <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors text-sm">
-                        View Details
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* ── COMPLETED SUMMARY ───────────────────────────────────────────── */}
+        {completedExams.length > 0 && (
+          <section className="mb-7">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold text-gray-800">Recent Results</h2>
+              <button onClick={() => navigate("/student/results")}
+                className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1">
+                View All Results <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-          )}
+            <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+              {completedExams.slice(0, 4).map((exam, i, arr) => (
+                <div key={exam._id} className={`flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors
+                  ${i < arr.length - 1 ? "border-b border-gray-100" : ""}`}>
+                  <div className="w-10 h-10 bg-purple-50 border border-purple-100 rounded-xl
+                    flex items-center justify-center shrink-0">
+                    <Trophy className="w-5 h-5 text-purple-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 text-sm truncate">{exam.subject}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {fmt(exam.endTime, { day:"2-digit", month:"short", year:"numeric" })}
+                      · {exam.questionCount} Questions
+                    </p>
+                  </div>
+                  <button onClick={() => navigate("/student/results")}
+                    className="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold
+                      px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                    Results <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
-          {/* Completed Exams Section */}
-          {examsData.completed.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Results</h3>
-              <div className="space-y-4">
-                {examsData.completed.map(exam => (
-                  <div key={exam.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                      <div>
-                        <h4 className="font-semibold text-gray-800">{exam.title}</h4>
-                        <p className="text-sm text-gray-500 mt-1">{exam.subject}</p>
-                        <div className="flex items-center space-x-4 mt-2">
-                          <span className="text-sm font-medium text-gray-700">Score: {exam.score}/{exam.totalScore}</span>
-                          <span className="text-sm font-medium text-green-600">({exam.percentage}%)</span>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => navigate('/student/results')}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
-                      >
-                        View Result
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Empty state */}
+        {!loading && exams.length === 0 && !error && (
+          <div className="text-center py-24">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-5">
+              <BookOpen className="w-9 h-9 text-gray-300" />
             </div>
-          )}
-        </div>
+            <p className="text-gray-600 font-semibold text-lg mb-1">No exams yet</p>
+            <p className="text-gray-400 text-sm">Your department has no scheduled exams at the moment.</p>
+          </div>
+        )}
+
+        {/* Loading skeleton */}
+        {loading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {[1,2,3].map(i => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse">
+                <div className="h-5 bg-gray-200 rounded w-3/4 mb-3" />
+                <div className="h-3 bg-gray-200 rounded w-1/2 mb-4" />
+                <div className="h-16 bg-gray-100 rounded-xl mb-3" />
+                <div className="h-10 bg-gray-100 rounded-xl" />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Modals */}
-      {showGuidelines && <GuidelinesView />}
-      {examStarted && (
-        <ExamInterface
-          exam={selectedExam}
-          onExamEnd={handleExamEnd}
-        />
+      {showGuidelines && (
+        <GuidelinesModal exam={selectedExam} onStart={beginExam}
+          onClose={() => { setShowGuidelines(false); setSelectedExam(null); }}
+          starting={starting} />
       )}
-    </div>
+    </StudentLayout>
   );
 };
 
