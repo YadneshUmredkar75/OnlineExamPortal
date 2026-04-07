@@ -57,7 +57,6 @@ router.get('/exams/:examId/attendees', getExamAttendees);
 router.get('/exams/:examId/attendees/export', exportExamAttendees);
 // Inside your admin-protected router
 router.delete('/exams/:examId/attempts/:studentId/reschedule', resetExamAttempt);
-
 // ── Exam Attempts (admin view + reschedule) ───────────────────────────────────
 // IMPORTANT: /exams/:id/attempts must come AFTER /exams/:id
 // GET    /api/admin/exams/:id/attempts                              — view all student attempts

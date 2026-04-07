@@ -1056,43 +1056,30 @@ export const getExamAttendees = async (req, res) => {
       return res.status(400).json({ message: 'Invalid exam ID' });
     }
 
-    // Verify exam belongs to admin's department
-    const exam = await Exam.findOne({ 
-      _id: examId, 
-      department: adminDept 
-    });
-
+    const exam = await Exam.findOne({ _id: examId, department: adminDept });
     if (!exam) {
       return res.status(404).json({ message: 'Exam not found or not in your department' });
     }
 
-    // Get ALL students in the department
     const allStudents = await User.find({ 
       role: 'student', 
       department: adminDept 
-    }).select('fullName email rollNumber studentId department')
-      .lean();
+    }).select('fullName email rollNumber studentId department').lean();
 
-    // Get all attempts for this specific exam
     const attempts = await ExamAttempt.find({
       examId: examId,
       status: 'completed'
     }).select('studentId score totalMarks percentage grade submittedAt correctCount wrongCount skippedCount')
       .lean();
 
-    // Create map for fast lookup
     const attemptMap = new Map();
-    attempts.forEach(attempt => {
-      attemptMap.set(attempt.studentId.toString(), attempt);
-    });
+    attempts.forEach(a => attemptMap.set(a.studentId.toString(), a));
 
-    // Separate attended and not attended
     const attendedStudents = [];
     const notAttendedStudents = [];
 
     for (const student of allStudents) {
       const attempt = attemptMap.get(student._id.toString());
-
       const studentData = {
         _id: student._id,
         fullName: student.fullName || 'Unknown Student',
@@ -1131,18 +1118,13 @@ export const getExamAttendees = async (req, res) => {
       }
     }
 
-    // Summary statistics
     const totalStudents = allStudents.length;
     const attendedCount = attendedStudents.length;
     const notAttendedCount = notAttendedStudents.length;
-    const attendanceRate = totalStudents > 0 
-      ? ((attendedCount / totalStudents) * 100).toFixed(2) 
-      : 0;
-
+    const attendanceRate = totalStudents > 0 ? ((attendedCount / totalStudents) * 100).toFixed(2) : 0;
     const averageScore = attendedCount > 0 
       ? (attendedStudents.reduce((sum, s) => sum + s.percentage, 0) / attendedCount).toFixed(2) 
       : 0;
-
     const passCount = attendedStudents.filter(s => s.percentage >= 40).length;
 
     res.status(200).json({
@@ -1166,7 +1148,7 @@ export const getExamAttendees = async (req, res) => {
         passCount,
         passRate: attendedCount > 0 ? ((passCount / attendedCount) * 100).toFixed(2) : 0
       },
-      attendedStudents: attendedStudents.sort((a, b) => b.percentage - a.percentage), // Top scorers first
+      attendedStudents: attendedStudents.sort((a, b) => b.percentage - a.percentage),
       notAttendedStudents
     });
 
@@ -1175,9 +1157,10 @@ export const getExamAttendees = async (req, res) => {
     res.status(500).json({ message: 'Server error: ' + err.message });
   }
 };
+
 // =============================================================================
 // DELETE /api/admin/exams/:examId/attempts/:studentId/reschedule
-// Reset / Delete a student's attempt so they can retake the exam
+// Reset student's attempt so they can retake the exam
 // =============================================================================
 export const resetExamAttempt = async (req, res) => {
   try {
@@ -1186,17 +1169,11 @@ export const resetExamAttempt = async (req, res) => {
 
     const { examId, studentId } = req.params;
 
-    // Verify exam belongs to admin's department
-    const exam = await Exam.findOne({ 
-      _id: examId, 
-      department: adminDept 
-    });
-
+    const exam = await Exam.findOne({ _id: examId, department: adminDept });
     if (!exam) {
       return res.status(404).json({ message: 'Exam not found or not in your department' });
     }
 
-    // Verify student belongs to the same department
     const student = await User.findOne({ 
       _id: studentId, 
       role: 'student',
@@ -1207,7 +1184,6 @@ export const resetExamAttempt = async (req, res) => {
       return res.status(404).json({ message: 'Student not found or not in your department' });
     }
 
-    // Delete the existing attempt
     const deletedAttempt = await ExamAttempt.findOneAndDelete({
       examId: examId,
       studentId: studentId
@@ -1217,8 +1193,6 @@ export const resetExamAttempt = async (req, res) => {
       return res.status(404).json({ message: 'No attempt found for this student on this exam' });
     }
 
-    console.log(`Attempt reset for student ${studentId} on exam ${examId}`);
-
     res.status(200).json({
       success: true,
       message: `Exam attempt has been reset successfully for ${student.fullName || 'the student'}. They can now retake the exam.`,
@@ -1227,8 +1201,6 @@ export const resetExamAttempt = async (req, res) => {
 
   } catch (err) {
     console.error('resetExamAttempt error:', err);
-    res.status(500).json({ 
-      message: 'Server error while resetting attempt: ' + err.message 
-    });
+    res.status(500).json({ message: 'Server error while resetting attempt: ' + err.message });
   }
 };
