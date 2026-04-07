@@ -14,6 +14,7 @@ const router = express.Router();
 
 router.post('/student/exams/:id/submit',         protect, studentOnly, submitExam);
 router.get ('/student/results',                  protect, studentOnly, getMyResults);
-router.get ('/student/exams/:id/attempt-status', protect, studentOnly, getAttemptStatus);
+router.get('/exams/:id/attempt-status', protect, studentOnly,getAttemptStatus);
+router.post('/exams/:id/submit', protect, studentOnly,submitExam);
 
 export default router;

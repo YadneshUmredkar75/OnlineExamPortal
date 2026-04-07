@@ -383,13 +383,13 @@ const ExamList = () => {
                             </button>
 
                             {/* ✅ View Attempts — uses real exam._id */}
-                            <button
-                              onClick={() => navigate(`/admin/exams/${exam._id}/attempts`)}
-                              title="View student attempts"
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
-                                text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors">
-                              <FiUsers className="w-3.5 h-3.5" /> Attempts
-                            </button>
+                                                  <button
+                        onClick={() => navigate(`/admin/exams/${exam._id}/attempts`)}
+                        title="View student attempts"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
+                          text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors">
+                        <FiUsers className="w-3.5 h-3.5" /> Attempts
+                      </button> 
 
                           </div>
                         </td>

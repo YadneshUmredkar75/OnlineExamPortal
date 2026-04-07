@@ -1,7 +1,7 @@
 // controllers/examAttemptController.js
 
 import Exam        from '../models/exam.model.js';
-import ExamAttempt from '../models/examattempt.model.js';
+import ExamAttempt from '../models/examAttempt.model.js';
 import User        from '../models/user.models.js';
 import mongoose from 'mongoose';
 

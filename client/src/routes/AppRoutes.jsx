@@ -15,7 +15,7 @@ import EditExam from "../pages/admin/Editexam";
 import StudentDashboard from "../pages/student/StudentDashboard";
 import StudentExams from "../pages/student/Studentexams";
 import StudentResults from "../pages/student/StudentResults";
-import ExamAttempts from "../pages/admin/ExamAttempt";
+import ExamAttempts from "../pages/admin/ExamAttempts";
 
 // ─── PROTECTED ROUTE ──────────────────────────────────────────────────────────
 const ProtectedRoute = ({ children, allowedRoles }) => {

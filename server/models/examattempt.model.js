@@ -1,77 +1,99 @@
 // models/examAttempt.model.js
-// Tracks each student's exam submission — one attempt per student per exam.
-// Admin can reset (reschedule) by deleting the attempt.
-
 import mongoose from 'mongoose';
 
-const answerSchema = new mongoose.Schema({
-  questionId:    { type: mongoose.Schema.Types.ObjectId, required: true },
-  selectedOption: { type: Number, min: 0, max: 3, default: null }, // null = unanswered
-}, { _id: false });
-
 const examAttemptSchema = new mongoose.Schema({
-
-  exam: {
-    type:     mongoose.Schema.Types.ObjectId,
-    ref:      'Exam',
+  examId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Exam',
+    required: [true, 'Exam ID is required']
+  },
+  studentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'Student ID is required']
+  },
+  answers: [{
+    questionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true
+    },
+    userAnswer: {
+      type: Number,
+      required: true,
+      validate: {
+        validator: function(value) {
+          return value === -1 || (value >= 0 && value <= 3);
+        },
+        message: 'Answer must be -1 (skipped) or between 0-3'
+      }
+    },
+    isCorrect: {
+      type: Boolean,
+      default: false
+    },
+    marksObtained: {
+      type: Number,
+      default: 0
+    }
+  }],
+  score: {
+    type: Number,
     required: true,
+    default: 0,
+    min: 0
   },
-
-  student: {
-    type:     mongoose.Schema.Types.ObjectId,
-    ref:      'User',
+  totalMarks: {
+    type: Number,
     required: true,
+    min: 0
   },
-
-  department: {
-    type:     String,
-    enum:     ['IT', 'CS', 'CE', 'ECE'],
+  percentage: {
+    type: Number,
     required: true,
+    min: 0,
+    max: 100
   },
-
-  // Snapshot of answers at submission time
-  answers: {
-    type:    [answerSchema],
-    default: [],
+  grade: {
+    type: String,
+    required: true,
+    uppercase: true,
+    enum: ['A+', 'A', 'B+', 'B', 'C', 'D', 'F']
   },
-
-  // Scoring (computed at submission)
-  score:           { type: Number, default: 0 },
-  totalMarks:      { type: Number, default: 0 },
-  marksPerQuestion:{ type: Number, default: 1 },
-  correctCount:    { type: Number, default: 0 },
-  wrongCount:      { type: Number, default: 0 },
-  unansweredCount: { type: Number, default: 0 },
-  percentage:      { type: Number, default: 0 },
-
-  // Status
   status: {
-    type:    String,
-    enum:    ['submitted', 'terminated', 'rescheduled'],
-    default: 'submitted',
+    type: String,
+    enum: ['in-progress', 'completed'],
+    default: 'in-progress',
+    required: true
   },
-
-  // If terminated — reason
-  terminationReason: { type: String, default: null },
-
-  // Admin reschedule log
-  rescheduledAt: { type: Date, default: null },
-  rescheduledBy: {
-    type:    mongoose.Schema.Types.ObjectId,
-    ref:     'User',
-    default: null,
+  startedAt: {
+    type: Date,
+    default: Date.now
   },
-  rescheduledNote: { type: String, default: null },
+  submittedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true
+});
 
-  submittedAt: { type: Date, default: Date.now },
+// Compound index to ensure one attempt per exam per student
+examAttemptSchema.index({ examId: 1, studentId: 1 }, { unique: true });
 
-}, { timestamps: true });
-
-// ── One attempt per student per exam ──────────────────────────────────────────
-// If admin reschedules, the attempt document is DELETED so a fresh attempt is allowed.
-examAttemptSchema.index({ exam: 1, student: 1 }, { unique: true });
-examAttemptSchema.index({ student: 1, submittedAt: -1 });
-examAttemptSchema.index({ exam: 1, department: 1 });
+// Pre-save middleware to calculate grade if not provided
+examAttemptSchema.pre('save', function() {
+  if (!this.grade && this.percentage !== undefined) {
+    const percentage = this.percentage;
+    if (percentage >= 90) this.grade = 'A+';
+    else if (percentage >= 80) this.grade = 'A';
+    else if (percentage >= 70) this.grade = 'B+';
+    else if (percentage >= 60) this.grade = 'B';
+    else if (percentage >= 50) this.grade = 'C';
+    else if (percentage >= 40) this.grade = 'D';
+    else this.grade = 'F';
+  }
+  
+});
 
 const ExamAttempt = mongoose.model('ExamAttempt', examAttemptSchema);
 export default ExamAttempt;

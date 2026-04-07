@@ -10,7 +10,7 @@ import {
 
 const NAV = [
   { path: "/student/dashboard", label: "Dashboard",  icon: LayoutDashboard },
-  { path: "/student/exams",     label: "My Exams",   icon: BookOpen         },
+  // { path: "/student/exams",     label: "My Exams",   icon: BookOpen         },
   { path: "/student/results",   label: "Results",    icon: ClipboardList    },
 ];
 

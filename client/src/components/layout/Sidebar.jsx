@@ -23,11 +23,11 @@ const Sidebar = () => {
     { path: "/admin/student-scores", name: "Scores", icon: <FiBarChart2 /> },
     { path: "/admin/create-exam", name: "Create Exam", icon: <FiFileText /> },
     { path: "/admin/get-exams", name: "Exam List", icon: <FiList /> },
-     { path: "/admin/exams/:id/attempts", name: "Exam attempts", icon: <FiList /> },
+    //  { path: "/admin/exams/:id/attempts", name: "Exam attempts", icon: <FiList /> },
   ];
 
   const bottomItems = [
-    { path: "/admin/setting", name: "Settings", icon: <FiSettings /> },
+    // { path: "/admin/setting", name: "Settings", icon: <FiSettings /> },
     { path: "/logout", name: "Logout", icon: <FiLogOut /> },
   ];
 

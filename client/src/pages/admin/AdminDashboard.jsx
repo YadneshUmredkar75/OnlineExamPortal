@@ -1,178 +1,249 @@
+// pages/admin/AdminDashboard.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import {
-  FiUsers,
-  FiFileText,
-  FiBarChart2,
-  FiMonitor,
-  FiPlusCircle,
-  FiEye,
-  FiAward,
-  FiTrendingUp,
-  FiClock,
-} from "react-icons/fi";
-import { FaCheckCircle } from "react-icons/fa";  // ← fixed: added this import
+  Users, FileText, Award, Monitor, TrendingUp, Star,
+  PlusCircle, Eye, Clock, Calendar, RefreshCw, AlertCircle,
+} from "lucide-react";
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+});
+
+api.interceptors.request.use((cfg) => {
+  const t = localStorage.getItem("token");
+  if (t) {
+    cfg.headers.Authorization = `Bearer ${t}`;
+  } else {
+    window.location.href = "/";
+    return Promise.reject();
+  }
+  return cfg;
+});
+
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.clear();
+      window.location.href = "/";
+    }
+    return Promise.reject(err);
+  }
+);
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [adminDepartment, setAdminDepartment] = useState("Loading...");
+  const [adminDepartment, setAdminDepartment] = useState("CS");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [stats, setStats] = useState({
+    totalStudents: 1,
+    totalExams: 1,
+    averageScore: 100,
+    activeExams: 1,
+    totalResults: 1,
+    passRate: 100,
+  });
+  const [recentExams, setRecentExams] = useState([]);
+  const [recentResults, setRecentResults] = useState([]);
 
   useEffect(() => {
-    const dept = localStorage.getItem("adminDepartment");
-    if (dept) {
-      setAdminDepartment(dept);
-    } else {
-      setAdminDepartment("Not Set");
-    }
+    const dept = localStorage.getItem("adminDepartment") || "CS";
+    setAdminDepartment(dept);
+    fetchDashboardData();
   }, []);
 
-  // Stats (dummy – can be replaced with real data later)
-  const stats = [
-    {
-      title: "Total Students",
-      value: 156,
-      icon: FiUsers,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
-    },
-    {
-      title: "Total Exams Created",
-      value: 24,
-      icon: FiFileText,
-      color: "text-green-600",
-      bg: "bg-green-50",
-    },
-    {
-      title: "Average Score",
-      value: "78%",
-      icon: FiAward,
-      color: "text-amber-600",
-      bg: "bg-amber-50",
-    },
-    {
-      title: "Active Sessions",
-      value: 12,
-      icon: FiMonitor,
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-    },
-  ];
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [studentsRes, examsRes, resultsRes] = await Promise.all([
+        api.get("/admin/students"),
+        api.get("/admin/exams"),
+        api.get("/admin/results"),
+      ]);
 
-  // Quick Actions
-  const quickActions = [
-    {
-      title: "Add New Student",
-      path: "/admin/add-student",
-      icon: FiPlusCircle,
-      color: "bg-blue-600 hover:bg-blue-700",
-    },
-    {
-      title: "View Students",
-      path: "/admin/view-students",
-      icon: FiUsers,
-      color: "bg-green-600 hover:bg-green-700",
-    },
-    {
-      title: "Student Scores",
-      path: "/admin/student-scores",
-      icon: FiTrendingUp,
-      color: "bg-amber-600 hover:bg-amber-700",
-    },
-    {
-      title: "Create Exam",
-      path: "/admin/create-exam",
-      icon: FiFileText,
-      color: "bg-purple-600 hover:bg-purple-700",
-    },
-  ];
+      const students = studentsRes.data.students || [];
+      const exams = examsRes.data.exams || [];
+      const results = resultsRes.data.results || [];
 
-  // Recent activity (dummy data)
-  const recentActivity = [
-    { text: "Added 5 new students to Computer Science", time: "2 hours ago" },
-    { text: "Created Mathematics Mid-Term Exam", time: "Yesterday" },
-    { text: "Updated scores for Data Structures batch", time: "3 days ago" },
+      // Stats
+      const totalStudents = students.length;
+      const totalExams = exams.length;
+      const activeExams = exams.filter((e) => e.status === "active").length;
+      const totalResults = results.length;
+
+      let totalScore = 0;
+      results.forEach(r => totalScore += r.percentage || 0);
+      const averageScore = totalResults > 0 ? Math.round(totalScore / totalResults) : 0;
+      const passRate = totalResults > 0 
+        ? Math.round((results.filter(r => (r.percentage || 0) >= 40).length / totalResults) * 100) 
+        : 0;
+
+      setStats({
+        totalStudents,
+        totalExams,
+        averageScore,
+        activeExams,
+        totalResults,
+        passRate,
+      });
+
+      // Recent Exams (latest 3)
+      const recentE = [...exams]
+        .sort((a, b) => new Date(b.createdAt || b.startTime) - new Date(a.createdAt || a.startTime))
+        .slice(0, 3);
+      setRecentExams(recentE);
+
+      // Recent Results (latest 3)
+      const recentR = [...results]
+        .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
+        .slice(0, 3);
+      setRecentResults(recentR);
+
+    } catch (err) {
+      console.error("Dashboard fetch error:", err);
+      setError(err.response?.data?.message || "Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const statCards = [
+    { title: "Total Students", value: stats.totalStudents, icon: Users, color: "text-blue-600", change: "+12%" },
+    { title: "Total Exams", value: stats.totalExams, icon: FileText, color: "text-green-600", change: "+8%" },
+    { title: "Average Score", value: `${stats.averageScore}%`, icon: Award, color: "text-amber-600", change: "Excellent" },
+    { title: "Active Exams", value: stats.activeExams, icon: Monitor, color: "text-purple-600", change: "Live Now" },
+    { title: "Total Results", value: stats.totalResults, icon: TrendingUp, color: "text-indigo-600", change: "Submitted" },
+    { title: "Pass Rate", value: `${stats.passRate}%`, icon: Star, color: "text-emerald-600", change: "Good" },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+
         {/* Welcome Header */}
-        <div className="mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-            Welcome, Admin
-          </h1>
-          <p className="mt-2 text-lg text-gray-600">
-            Managing <span className="font-semibold text-blue-600">{adminDepartment}</span> Department
-          </p>
+        <div className="flex items-center justify-between mb-10">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900">Welcome, Admin</h1>
+            <p className="text-xl text-gray-600 mt-1">
+              Managing <span className="font-semibold text-blue-600">{adminDepartment}</span> Department
+            </p>
+          </div>
+          <button
+            onClick={fetchDashboardData}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
         </div>
 
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-2xl mb-8 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5" />
+            {error}
+          </div>
+        )}
+
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {stats.map((stat, index) => (
-            <div
-              key={index}
-              className={`bg-white rounded-xl shadow border border-gray-200 p-6 hover:shadow-lg transition-shadow ${stat.bg}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className={`text-3xl font-bold mt-2 ${stat.color}`}>{stat.value}</p>
-                </div>
-                <stat.icon className={`w-10 h-10 ${stat.color} opacity-80`} />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-12">
+          {statCards.map((stat, i) => (
+            <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <stat.icon className={`w-8 h-8 ${stat.color}`} />
+                <span className="text-xs font-medium text-gray-400">{stat.change}</span>
               </div>
+              <div className="text-3xl font-bold text-gray-900 mb-1">{stat.value}</div>
+              <div className="text-sm text-gray-500">{stat.title}</div>
             </div>
           ))}
         </div>
 
-        {/* Quick Actions */}
-        <div className="bg-white rounded-xl shadow border border-gray-200 p-6 mb-12">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center gap-3">
-            <FiPlusCircle className="text-blue-600 w-7 h-7" />
-            Quick Actions
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {quickActions.map((action, index) => (
-              <button
-                key={index}
-                onClick={() => navigate(action.path)}
-                className={`group flex flex-col items-center justify-center p-6 rounded-xl text-white font-medium transition-all transform hover:scale-105 shadow-md ${action.color}`}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Recent Exams */}
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                Recent Exams
+              </h2>
+              <button 
+                onClick={() => navigate("/admin/exams")}
+                className="text-blue-600 text-sm hover:underline"
               >
-                <action.icon className="w-10 h-10 mb-3" />
-                <span className="text-center text-lg">{action.title}</span>
+                View All
               </button>
-            ))}
+            </div>
+
+            <div className="space-y-4">
+              {recentExams.length === 0 ? (
+                <p className="text-gray-500 py-8 text-center">No exams yet</p>
+              ) : (
+                recentExams.map((exam) => (
+                  <div key={exam._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors">
+                    <div>
+                      <div className="font-semibold text-gray-900">{exam.subject}</div>
+                      <div className="text-sm text-gray-500 flex items-center gap-4 mt-1">
+                        <span>{exam.duration} min</span>
+                        <span>{exam.questions?.length || 0} Qs</span>
+                        <span>{new Date(exam.startTime).toLocaleDateString('en-IN')}</span>
+                      </div>
+                    </div>
+                    
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Recent Activity */}
-        <div className="bg-white rounded-xl shadow border border-gray-200 p-6">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center gap-3">
-            <FiTrendingUp className="text-green-600 w-7 h-7" />
-            Recent Activity
-          </h2>
-
-          <div className="space-y-4">
-            {recentActivity.map((activity, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg border border-gray-100"
+          {/* Recent Results */}
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                Recent Results
+              </h2>
+              <button 
+                onClick={() => navigate("/admin/student-scores")}
+                className="text-blue-600 text-sm hover:underline"
               >
-                <div className="flex-shrink-0 mt-1">
-                  <FaCheckCircle className="text-green-500 w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-gray-800 font-medium">{activity.text}</p>
-                  <p className="text-sm text-gray-500 mt-1">{activity.time}</p>
-                </div>
-              </div>
-            ))}
+                View All
+              </button>
+            </div>
 
-            {recentActivity.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                No recent activity to show
-              </div>
-            )}
+            <div className="space-y-4">
+              {recentResults.length === 0 ? (
+                <p className="text-gray-500 py-8 text-center">No results yet</p>
+              ) : (
+                recentResults.map((result) => (
+                  <div key={result._id} className="p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-semibold text-gray-900 flex items-center gap-2">
+                          {result.studentName || result.student?.name || "tejas khope"}
+                          <span className="text-emerald-600 font-bold">{result.grade}</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mt-0.5">{result.examName || result.exam?.subject || "sdsd"}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xl font-bold text-gray-900">
+                          {result.score}/{result.totalMarks}
+                        </div>
+                        <div className="text-xs text-gray-500">{result.percentage}%</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 text-sm text-gray-600">
+                      {result.correctCount} correct • {result.wrongCount} wrong
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {result.submittedAt ? new Date(result.submittedAt).toLocaleDateString('en-IN') : "07/04/2026"}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -5,7 +5,7 @@ import axios from "axios";
 import {
   Clock, Calendar, CheckCircle, BookOpen, Play, AlertCircle,
   Camera, X, ChevronRight, Target, TrendingUp, Award,
-  FileText, Zap, RefreshCw, Trophy, BarChart3,
+  FileText, Zap, RefreshCw, Trophy, BarChart3, Lock,
 } from "lucide-react";
 import { StudentLayout } from "../../components/student/StudentLayout";
 import ExamInterface from "./ExamInterface";
@@ -95,7 +95,7 @@ const GuidelinesModal = ({ exam, onStart, onClose, starting }) => (
           {[
             { icon: Clock,    label: "Duration",  val: `${exam?.duration} min`,       bg: "bg-blue-50 text-blue-600"   },
             { icon: FileText, label: "Questions", val: exam?.questionCount ?? "—",     bg: "bg-purple-50 text-purple-600"},
-            { icon: Award,    label: "Per Q",     val: "2 marks",                      bg: "bg-green-50 text-green-600" },
+            { icon: Award,    label: "Per Q",     val: `${exam?.marksPerQuestion || 1} marks`, bg: "bg-green-50 text-green-600" },
             { icon: Calendar, label: "Ends",      val: fmt(exam?.endTime, { hour:"2-digit", minute:"2-digit", hour12:true }), bg: "bg-orange-50 text-orange-600" },
           ].map(({ icon: Icon, label, val, bg }) => (
             <div key={label} className={`${bg} rounded-xl p-3.5 flex items-center gap-3`}>
@@ -108,11 +108,12 @@ const GuidelinesModal = ({ exam, onStart, onClose, starting }) => (
           <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-3">Exam Rules</p>
           <ul className="space-y-2">
             {[
+              "⚠️ You can attempt this exam ONLY ONCE",
               "Camera must stay active — face must be visible at all times",
               "Do not switch tabs or exit fullscreen during the exam",
               "Only one person should be visible to the camera",
               "No negative marking — attempt all questions",
-              "3 proctoring violations = automatic termination",
+              "5 proctoring violations = automatic termination",
             ].map((r, i) => (
               <li key={i} className="flex items-start gap-2.5 text-sm text-slate-600">
                 <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center
@@ -146,15 +147,16 @@ const GuidelinesModal = ({ exam, onStart, onClose, starting }) => (
 );
 
 // ─── Exam Card ─────────────────────────────────────────────────────────────────
-const ExamCard = ({ exam, onStart, onViewResult }) => {
+const ExamCard = ({ exam, onStart, onViewResult, attempted }) => {
   const s = statusCfg[exam.status] || statusCfg.upcoming;
   const isActive   = exam.status === "active";
   const isUpcoming = exam.status === "upcoming";
   const isDone     = exam.status === "completed";
+  const isAttempted = attempted === true;
 
   return (
     <div className={`bg-white rounded-2xl border-2 ${isActive ? "border-green-300 shadow-green-100" : "border-gray-100"}
-      shadow-sm hover:shadow-md transition-all overflow-hidden`}>
+      shadow-sm hover:shadow-md transition-all overflow-hidden ${isAttempted ? "opacity-75" : ""}`}>
       {/* Top stripe */}
       <div className={`h-1 ${isActive ? "bg-green-500" : isUpcoming ? "bg-blue-500" : "bg-gray-300"}`} />
 
@@ -165,11 +167,18 @@ const ExamCard = ({ exam, onStart, onViewResult }) => {
             <h3 className="font-bold text-gray-900 text-base truncate">{exam.subject}</h3>
             <p className="text-xs text-gray-400 mt-0.5">{exam.department} Department</p>
           </div>
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
-            shrink-0 ${s.bg} ${s.text}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${isActive ? "animate-pulse" : ""}`} />
-            {s.label}
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
+              shrink-0 ${s.bg} ${s.text}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${isActive ? "animate-pulse" : ""}`} />
+              {s.label}
+            </span>
+            {isAttempted && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                <CheckCircle className="w-3 h-3" /> Attempted
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Info chips */}
@@ -181,7 +190,7 @@ const ExamCard = ({ exam, onStart, onViewResult }) => {
             <FileText className="w-3 h-3" /> {exam.questionCount} Qs
           </span>
           <span className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 border border-gray-100 px-2.5 py-1.5 rounded-lg">
-            <Award className="w-3 h-3" /> {exam.questionCount * 2} marks
+            <Award className="w-3 h-3" /> {exam.questionCount * (exam.marksPerQuestion || 1)} marks
           </span>
         </div>
 
@@ -208,12 +217,18 @@ const ExamCard = ({ exam, onStart, onViewResult }) => {
         </div>
 
         {/* CTA */}
-        {isActive && (
+        {isActive && !isAttempted && (
           <button onClick={() => onStart(exam)}
             className="w-full flex items-center justify-center gap-2 py-3 bg-green-600
               hover:bg-green-700 text-white text-sm font-bold rounded-xl shadow-md transition-colors">
             <Play className="w-4 h-4 fill-white" /> Start Exam Now
           </button>
+        )}
+        {isActive && isAttempted && (
+          <div className="w-full flex items-center justify-center gap-2 py-3 bg-gray-100
+            text-gray-500 text-sm font-bold rounded-xl">
+            <Lock className="w-4 h-4" /> Already Attempted
+          </div>
         )}
         {isUpcoming && (
           <div className="w-full py-2.5 text-center text-sm text-gray-400 bg-gray-50 rounded-xl border border-gray-100 font-medium">
@@ -242,12 +257,13 @@ const StudentDashboard = () => {
     const t = localStorage.getItem("token");
     const r = localStorage.getItem("userRole");
     if (!t || r !== "student") navigate("/");
-  }, []); // eslint-disable-line
+  }, []);
 
   const studentName = localStorage.getItem("studentName") || "Student";
   const studentId   = localStorage.getItem("studentId")   || "";
 
   const [exams,         setExams]         = useState([]);
+  const [attemptMap,    setAttemptMap]    = useState({});
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState("");
   const [selectedExam,  setSelectedExam]  = useState(null);
@@ -258,18 +274,38 @@ const StudentDashboard = () => {
 
   useEffect(() => { const t = setInterval(() => setCurrentTime(new Date()), 60000); return () => clearInterval(t); }, []);
 
+  // Load exams and attempt statuses
   const loadExams = useCallback(async () => {
     setLoading(true); setError("");
     try {
       const res = await api.get("/student/exams");
-      setExams(res.data.exams || []);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+      const examList = res.data.exams || [];
+      setExams(examList);
+      
+      // Fetch attempt status for each exam
+      const attemptStatuses = {};
+      await Promise.all(
+        examList.map(async (exam) => {
+          try {
+            const statusRes = await api.get(`/student/exams/${exam._id}/attempt-status`);
+            if (statusRes.data.attempted) {
+              attemptStatuses[exam._id] = true;
+            }
+          } catch (err) {
+            console.error(`Failed to fetch attempt status for exam ${exam._id}:`, err);
+          }
+        })
+      );
+      setAttemptMap(attemptStatuses);
+    } catch (err) { 
+      setError(err.message); 
+    } finally { 
+      setLoading(false); 
+    }
   }, []);
 
   useEffect(() => { loadExams(); }, [loadExams]);
 
-  // Check if any upcoming exam starts today
   const isToday = (iso) => {
     const d = new Date(iso);
     const n = new Date();
@@ -281,7 +317,15 @@ const StudentDashboard = () => {
   const completedExams = exams.filter(e => e.status === "completed");
   const todayExams    = upcomingExams.filter(e => isToday(e.startTime));
 
-  const handleStartExam = (exam) => { setSelectedExam(exam); setShowGuidelines(true); };
+  const handleStartExam = (exam) => {
+    // Check if already attempted
+    if (attemptMap[exam._id]) {
+      alert("You have already attempted this exam. You cannot take it again.");
+      return;
+    }
+    setSelectedExam(exam); 
+    setShowGuidelines(true); 
+  };
 
   const beginExam = async () => {
     setStarting(true);
@@ -296,8 +340,14 @@ const StudentDashboard = () => {
     } finally { setStarting(false); }
   };
 
+  const handleExamEnd = () => {
+    setExamStarted(false); 
+    setSelectedExam(null); 
+    loadExams(); // Refresh to update attempt status
+  };
+
   if (examStarted && selectedExam) {
-    return <ExamInterface exam={selectedExam} onExamEnd={() => { setExamStarted(false); setSelectedExam(null); loadExams(); }} />;
+    return <ExamInterface exam={selectedExam} onExamEnd={handleExamEnd} />;
   }
 
   const greet = () => {
@@ -314,7 +364,6 @@ const StudentDashboard = () => {
         {/* ── WELCOME BANNER ─────────────────────────────────────────────── */}
         <div className="relative overflow-hidden bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700
           rounded-2xl p-6 mb-7 text-white shadow-xl">
-          {/* Decorative circles */}
           <div className="absolute -top-8 -right-8 w-40 h-40 bg-white/5 rounded-full" />
           <div className="absolute -bottom-10 -right-16 w-56 h-56 bg-white/5 rounded-full" />
           <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -374,7 +423,13 @@ const StudentDashboard = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {activeExams.map(e => (
-                <ExamCard key={e._id} exam={e} onStart={handleStartExam} onViewResult={e => navigate("/student/results")} />
+                <ExamCard 
+                  key={e._id} 
+                  exam={e} 
+                  onStart={handleStartExam} 
+                  onViewResult={() => navigate("/student/results")}
+                  attempted={attemptMap[e._id]}
+                />
               ))}
             </div>
           </section>
@@ -391,7 +446,13 @@ const StudentDashboard = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {todayExams.map(e => (
-                <ExamCard key={e._id} exam={e} onStart={handleStartExam} onViewResult={() => navigate("/student/results")} />
+                <ExamCard 
+                  key={e._id} 
+                  exam={e} 
+                  onStart={handleStartExam} 
+                  onViewResult={() => navigate("/student/results")}
+                  attempted={attemptMap[e._id]}
+                />
               ))}
             </div>
           </section>

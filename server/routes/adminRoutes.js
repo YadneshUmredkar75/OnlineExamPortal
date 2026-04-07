@@ -15,6 +15,13 @@ import {
   createExam,
   updateExam,
   deleteExam,
+  getAdminResults,
+  getExamResults,
+  getStudentResultsByAdmin,
+  exportExamResults,
+  getExamAttendees,        // Add this
+  exportExamAttendees,
+  resetExamAttempt
 } from '../controllers/examController.js';
 import {
   getExamAttempts,
@@ -40,6 +47,16 @@ router.post  ('/exams',     createExam);
 router.get   ('/exams/:id', getExamById);
 router.put   ('/exams/:id', updateExam);
 router.delete('/exams/:id', deleteExam);
+// Results management routes
+router.get('/results', getAdminResults);
+router.get('/results/exam/:examId', getExamResults);
+router.get('/results/student/:studentId', getStudentResultsByAdmin);
+router.get('/results/export/:examId', exportExamResults);
+// NEW: Exam attendees routes
+router.get('/exams/:examId/attendees', getExamAttendees);
+router.get('/exams/:examId/attendees/export', exportExamAttendees);
+// Inside your admin-protected router
+router.delete('/exams/:examId/attempts/:studentId/reschedule', resetExamAttempt);
 
 // ── Exam Attempts (admin view + reschedule) ───────────────────────────────────
 // IMPORTANT: /exams/:id/attempts must come AFTER /exams/:id
