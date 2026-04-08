@@ -1,7 +1,8 @@
 // controllers/superAdminController.js
 import { body, param, validationResult } from 'express-validator';
 import User from '../models/user.models.js';
-
+import Exam from '../models/exam.model.js';
+import ExamAttempt from '../models/examAttempt.model.js';
 // ─── HELPER: send first validation error as a clean message ──────────────────
 const validate = (req, res) => {
   const errors = validationResult(req);
@@ -269,3 +270,170 @@ export const toggleAdminStatus = [
     }
   },
 ];
+
+
+// =============================================================================
+// GET /api/superadmin/department-stats
+// Super Admin: Get department-wise student count and results summary
+// =============================================================================
+export const getDepartmentStats = async (req, res) => {
+  try {
+    // Get all departments that have students or exams
+    const departments = await User.distinct('department', { role: 'student' });
+
+    const departmentStats = [];
+
+    for (const dept of departments) {
+      // Count students in this department
+      const studentCount = await User.countDocuments({ 
+        role: 'student', 
+        department: dept 
+      });
+
+      // Get all exams in this department
+      const exams = await Exam.find({ department: dept }).select('_id');
+
+      const examIds = exams.map(e => e._id);
+
+      // Get all completed attempts for these exams
+      const attempts = await ExamAttempt.find({
+        examId: { $in: examIds },
+        status: 'completed'
+      }).select('percentage score totalMarks');
+
+      const totalAttempts = attempts.length;
+      const totalStudentsWithResults = new Set(attempts.map(a => a.studentId)).size; // unique students who attempted
+
+      // Calculate statistics
+      let totalScore = 0;
+      let passCount = 0;
+
+      attempts.forEach(attempt => {
+        totalScore += attempt.percentage || 0;
+        if ((attempt.percentage || 0) >= 40) passCount++;
+      });
+
+      const averageScore = totalAttempts > 0 
+        ? Math.round(totalScore / totalAttempts) 
+        : 0;
+
+      const passRate = totalAttempts > 0 
+        ? Math.round((passCount / totalAttempts) * 100) 
+        : 0;
+
+      departmentStats.push({
+        department: dept,
+        studentCount,
+        totalExams: exams.length,
+        totalAttempts,
+        averageScore,
+        passRate,
+        passCount,
+        failCount: totalAttempts - passCount
+      });
+    }
+
+    // Overall summary
+    const totalStudents = await User.countDocuments({ role: 'student' });
+    const totalAdmins = await User.countDocuments({ role: 'admin' });
+
+    res.status(200).json({
+      success: true,
+      totalStudents,
+      totalAdmins,
+      departments: departmentStats.sort((a, b) => b.studentCount - a.studentCount), // sort by student count
+      totalDepartments: departments.length
+    });
+
+  } catch (err) {
+    console.error('getDepartmentStats error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error: ' + err.message 
+    });
+  }
+};
+
+// =============================================================================
+// GET /api/superadmin/department/:dept/results
+// Super Admin: Get detailed results for a specific department
+// =============================================================================
+export const getDepartmentResults = async (req, res) => {
+  try {
+    const { dept } = req.params;
+
+    if (!dept) {
+      return res.status(400).json({ message: 'Department is required' });
+    }
+
+    // Get all students in department
+    const students = await User.find({ 
+      role: 'student', 
+      department: dept 
+    }).select('fullName email rollNumber studentId').lean();
+
+    // Get all exams in department
+    const exams = await Exam.find({ department: dept })
+      .select('subject duration marksPerQuestion questions startTime endTime')
+      .lean();
+
+    const examIds = exams.map(e => e._id);
+
+    // Get all attempts
+    const attempts = await ExamAttempt.find({
+      examId: { $in: examIds },
+      status: 'completed'
+    })
+    .populate('studentId', 'fullName email rollNumber')
+    .populate('examId', 'subject')
+    .sort({ submittedAt: -1 })
+    .lean();
+
+    // Format attempts
+    const formattedAttempts = attempts.map(attempt => {
+      let correctCount = 0, wrongCount = 0, skippedCount = 0;
+
+      if (attempt.answers && Array.isArray(attempt.answers)) {
+        attempt.answers.forEach(ans => {
+          if (ans.isCorrect) correctCount++;
+          else if (ans.userAnswer === -1) skippedCount++;
+          else wrongCount++;
+        });
+      }
+
+      return {
+        _id: attempt._id,
+        student: {
+          _id: attempt.studentId?._id,
+          fullName: attempt.studentId?.fullName || 'Unknown',
+          rollNumber: attempt.studentId?.rollNumber || 'N/A'
+        },
+        exam: {
+          _id: attempt.examId?._id,
+          subject: attempt.examId?.subject || 'Unknown Exam'
+        },
+        score: attempt.score,
+        totalMarks: attempt.totalMarks,
+        percentage: attempt.percentage,
+        grade: attempt.grade,
+        correctCount,
+        wrongCount,
+        skippedCount,
+        submittedAt: attempt.submittedAt
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      department: dept,
+      totalStudents: students.length,
+      totalExams: exams.length,
+      totalAttempts: attempts.length,
+      results: formattedAttempts
+    });
+
+  } catch (err) {
+    console.error('getDepartmentResults error:', err);
+    res.status(500).json({ message: 'Server error: ' + err.message });
+  }
+};

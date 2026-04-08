@@ -47,7 +47,7 @@ const AppRouter = () => {
 
       {/* ── Super Admin ── */}
       <Route path="/superadmin/*"           element={<SuperAdminDashboard />} />
-      <Route path="/superadmin/dashboard"   element={<SuperAdminDashboard />} />
+      {/* <Route path="/superadmin/dashboard"   element={<SuperAdminDashboard />} /> */}
       <Route path="/superadmin/admins"      element={<SuperAdminDashboard />} />
       <Route path="/superadmin/students"    element={<SuperAdminDashboard />} />
       <Route path="/superadmin/departments" element={<SuperAdminDashboard />} />

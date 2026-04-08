@@ -131,7 +131,7 @@ const Home = () => {
           email: email.trim(), password,
         });
         dispatch(loginSuccess({ token: res.data.token, role: "superadmin", user: res.data.user }));
-        navigate("/superadmin/dashboard");
+        navigate("/superadmin/admins");
         return;
       }
 

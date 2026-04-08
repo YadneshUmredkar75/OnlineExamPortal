@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import Exam from '../models/exam.model.js';
 import User from '../models/user.models.js';
 import ExamAttempt from '../models/examAttempt.model.js';
+
 const firstError = (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

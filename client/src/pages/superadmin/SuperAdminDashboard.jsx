@@ -1,6 +1,6 @@
+// pages/superadmin/SuperAdminDashboard.jsx
 import React, { useState } from "react";
 import Sidebar from "../../components/superadmin/Sidebar";
-import DashboardContent from "./components/DashboardContent";
 import AdminManagement from "./components/AdminManagement";
 import StudentData from "./components/StudentData";
 import DepartmentResults from "./components/DepartmentResults";
@@ -8,12 +8,10 @@ import Settings from "./components/Settings";
 
 const SuperAdminDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("admins"); // Default to Admin Management
 
   const renderContent = () => {
-    switch(activeTab) {
-      case "dashboard":
-        return <DashboardContent />;
+    switch (activeTab) {
       case "admins":
         return <AdminManagement />;
       case "students":
@@ -23,7 +21,7 @@ const SuperAdminDashboard = () => {
       case "settings":
         return <Settings />;
       default:
-        return <DashboardContent />;
+        return <AdminManagement />; // Fallback to Admin Management
     }
   };
 
@@ -37,7 +35,9 @@ const SuperAdminDashboard = () => {
       />
       
       <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-20'}`}>
-        {renderContent()}
+        <div className="p-8">
+          {renderContent()}
+        </div>
       </div>
     </div>
   );
