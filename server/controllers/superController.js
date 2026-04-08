@@ -2,7 +2,7 @@
 import { body, param, validationResult } from 'express-validator';
 import User from '../models/user.models.js';
 import Exam from '../models/exam.model.js';
-import ExamAttempt from '../models/examAttempt.model.js';
+import ExamAttempt from '../models/examattempt.model.js';
 // ─── HELPER: send first validation error as a clean message ──────────────────
 const validate = (req, res) => {
   const errors = validationResult(req);
