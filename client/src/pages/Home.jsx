@@ -297,7 +297,7 @@ const Home = () => {
           </form>
 
           <p className="text-center text-xs text-gray-300 mt-10">
-            SSInfotech · SAR ONLINE EXAM PORTAL · {new Date().getFullYear()}
+            · SAR ONLINE EXAM PORTAL · {new Date().getFullYear()}
           </p>
         </div>
       </div>
