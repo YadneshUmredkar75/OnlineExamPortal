@@ -162,7 +162,7 @@ const Home = () => {
             mx-auto mb-6 backdrop-blur-sm shadow-xl">
             <active.icon className="w-10 h-10 text-white" />
           </div>
-          <h2 className="text-3xl font-black mb-3">SAR ONLINE EXAM PORTAL</h2>
+          <h2 className="text-3xl font-black mb-3">SAR ONLINE EXAM PORTAL </h2>
           <p className="text-white/70 text-sm leading-relaxed mb-8">
             A secure, proctored examination platform for students and educators.
           </p>
