@@ -18,7 +18,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173", // local dev
-      "https://online-exam-portal-self.vercel.app" // deployed frontend
+      "https://online-exam-portal-self.vercel.app",
+      "https://saronlineexamportal.onrender.com"
     ],
     credentials: true,
   })
